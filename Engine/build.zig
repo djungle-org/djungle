@@ -4,14 +4,6 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const vulkan_module = b.dependency("vulkan", .{
-        .registry = std.Build.LazyPath{
-            .cwd_relative = b.graph.environ_map.get("VULKAN_REGISTRY_XML") orelse {
-                std.debug.panic("not in nix devshell with VULKAN_REGISTRY_XML env var", .{});
-            },
-        },
-    }).module("vulkan-zig");
-
     const logging_module = b.addModule("Logging", .{
         .root_source_file = b.path("Logging/logging.zig"),
         .target = target,
@@ -38,7 +30,6 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
-    renderer_module.addImport("Vulkan", vulkan_module);
     renderer_module.addImport("DeletionQueue", deletion_queue_module);
     renderer_module.addImport("Window", window_module);
 
@@ -49,7 +40,6 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
-    engine_module.addImport("Vulkan", vulkan_module);
     engine_module.addImport("DeletionQueue", deletion_queue_module);
     engine_module.addImport("Window", window_module);
     engine_module.addImport("Renderer", renderer_module);
@@ -59,6 +49,4 @@ pub fn build(b: *std.Build) void {
     }
 
     engine_module.linkSystemLibrary("SDL3", .{});
-
-    // b.installArtifact(engine_lib);
 }

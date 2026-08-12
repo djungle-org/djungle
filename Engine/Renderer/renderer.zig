@@ -4,7 +4,6 @@ const c = @cImport({
     @cInclude("SDL3/SDL_gpu.h");
 });
 
-const vk = @import("Vulkan");
 const delque = @import("DeletionQueue");
 const win = @import("Window");
 const log = @import("Logging");
@@ -29,9 +28,11 @@ pub const Renderer = struct {
 
     pub fn init(self: *@This(), gpa: std.mem.Allocator, window: *win.Window, comptime app_name: [:0]const u8) !void {
         self._gpu_device = c.SDL_CreateGPUDevice(0, debug, app_name) orelse {
-            log.err()
             return RendererError.FailedToCreateGpuDevice;
         };
+
+        _ = gpa;
+        _ = window;
     }
 
     pub fn deinit(self: *@This()) void {

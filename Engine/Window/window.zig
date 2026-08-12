@@ -35,7 +35,7 @@ pub const Window = struct {
             return WindowError.SdlSetHintFailed;
         }
 
-        const sdl_window = c.SDL_CreateWindow(name, @intCast(width), @intCast(height), c.SDL_WINDOW_VULKAN | c.SDL_WINDOW_RESIZABLE) orelse {
+        const sdl_window = c.SDL_CreateWindow(name, @intCast(width), @intCast(height), c.SDL_WINDOW_RESIZABLE) orelse {
             log.err(@src(), "{s}", .{c.SDL_GetError()});
             return WindowError.SdlWindowCreationFailed;
         };

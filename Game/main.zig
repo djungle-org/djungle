@@ -2,7 +2,7 @@ const std = @import("std");
 
 const eng = @import("Engine");
 
-const app_name = "ZigVulkan";
+const app_name = "djungle";
 
 pub fn main() !void {
     var debug_allocator = std.heap.DebugAllocator(.{}){};
