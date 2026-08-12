@@ -4,6 +4,12 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const c_module = b.addModule("C", .{
+        .root_source_file = b.path("c.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const logging_module = b.addModule("Logging", .{
         .root_source_file = b.path("Logging/logging.zig"),
         .target = target,
@@ -23,6 +29,8 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
+    window_module.addImport("C", c_module);
+
     const renderer_module = b.addModule("Renderer", .{
         .root_source_file = b.path("Renderer/renderer.zig"),
         .target = target,
@@ -30,6 +38,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
+    renderer_module.addImport("C", c_module);
     renderer_module.addImport("DeletionQueue", deletion_queue_module);
     renderer_module.addImport("Window", window_module);
 

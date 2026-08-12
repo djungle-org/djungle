@@ -1,8 +1,6 @@
 const std = @import("std");
 
-const c = @cImport({
-    @cInclude("SDL3/SDL.h");
-});
+const c = @import("C").c;
 
 const log = @import("Logging");
 

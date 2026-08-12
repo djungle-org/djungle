@@ -1,8 +1,6 @@
 const std = @import("std");
 
-const c = @cImport({
-    @cInclude("SDL3/SDL_gpu.h");
-});
+const c = @import("C").c;
 
 const delque = @import("DeletionQueue");
 const win = @import("Window");
@@ -18,6 +16,7 @@ pub const GpuDriver = enum {
 
 pub const RendererError = error{
     FailedToCreateGpuDevice,
+    FailedToClaimWindowForGpu,
 };
 
 const debug: bool = switch (@import("builtin").mode) {
@@ -35,6 +34,8 @@ pub const Renderer = struct {
     _gpu_device: *c.SDL_GPUDevice,
 
     pub fn init(self: *@This(), gpa: std.mem.Allocator, window: *win.Window, gpu_driver: GpuDriver, comptime app_name: [:0]const u8) !void {
+        self._window = window;
+
         const gpu_driver_name: ?[]const u8 = switch (gpu_driver) {
             .Auto => null,
             .Vulkan => "vulkan",
@@ -47,8 +48,11 @@ pub const Renderer = struct {
             return RendererError.FailedToCreateGpuDevice;
         };
 
+        if (!c.SDL_ClaimWindowForGPUDevice(self._gpu_device, self._window._sdl_window)) {
+            return RendererError.FailedToClaimWindowForGpu;
+        }
+
         _ = gpa;
-        _ = window;
         _ = app_name;
     }
 
