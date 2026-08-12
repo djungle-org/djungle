@@ -8,6 +8,14 @@ const delque = @import("DeletionQueue");
 const win = @import("Window");
 const log = @import("Logging");
 
+/// Auto to auto choose driver, Vulkan for Linux, Direct3D12 for Windows, Metal for MacOS
+pub const GpuDriver = enum {
+    Auto,
+    Vulkan,
+    Direct3D12,
+    Metal,
+};
+
 pub const RendererError = error{
     FailedToCreateGpuDevice,
 };
@@ -26,16 +34,25 @@ pub const Renderer = struct {
 
     _gpu_device: *c.SDL_GPUDevice,
 
-    pub fn init(self: *@This(), gpa: std.mem.Allocator, window: *win.Window, comptime app_name: [:0]const u8) !void {
-        self._gpu_device = c.SDL_CreateGPUDevice(0, debug, app_name) orelse {
+    pub fn init(self: *@This(), gpa: std.mem.Allocator, window: *win.Window, gpu_driver: GpuDriver, comptime app_name: [:0]const u8) !void {
+        const gpu_driver_name: ?[]const u8 = switch (gpu_driver) {
+            .Auto => null,
+            .Vulkan => "vulkan",
+            .Direct3D12 => "direct3d12",
+            .Metal => "metal",
+        };
+
+        // SPIRV for shaders so we can use slang
+        self._gpu_device = c.SDL_CreateGPUDevice(c.SDL_GPU_SHADERFORMAT_SPIRV, debug, @ptrCast(gpu_driver_name)) orelse {
             return RendererError.FailedToCreateGpuDevice;
         };
 
         _ = gpa;
         _ = window;
+        _ = app_name;
     }
 
     pub fn deinit(self: *@This()) void {
-        self._deletion_queue.deinit(self.allocator); // deinits all the items in the queue
+        _ = self;
     }
 };

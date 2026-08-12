@@ -23,7 +23,7 @@ pub fn main() !void {
     defer window.deinit();
 
     var renderer: eng.renderer.Renderer = undefined;
-    try renderer.init(gpa, &window, app_name);
+    try renderer.init(gpa, &window, .Auto, app_name);
     defer renderer.deinit();
 
     var running = true;
