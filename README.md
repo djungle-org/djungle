@@ -1,3 +1,4 @@
 # djungle
 
-[sdl](https://www.libsdl.org/) game engine made in zig
+game engine made in zig
+using [sdl](https://www.libsdl.org/) gpu for rendering
