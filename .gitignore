@@ -1,3 +1,11 @@
 .zig-cache/
 zig-out/
+zig-pkg/
+
+flake.nix
+flake.lock
+
+.direnv/
+.envrc
+
 *.o

@@ -1,0 +1,64 @@
+const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const vulkan_module = b.dependency("vulkan", .{
+        .registry = std.Build.LazyPath{
+            .cwd_relative = b.graph.environ_map.get("VULKAN_REGISTRY_XML") orelse {
+                std.debug.panic("not in nix devshell with VULKAN_REGISTRY_XML env var", .{});
+            },
+        },
+    }).module("vulkan-zig");
+
+    const logging_module = b.addModule("Logging", .{
+        .root_source_file = b.path("Logging/logging.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const deletion_queue_module = b.addModule("DeletionQueue", .{
+        .root_source_file = b.path("DeletionQueue/deletion_queue.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const window_module = b.addModule("Window", .{
+        .root_source_file = b.path("Window/window.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+
+    const renderer_module = b.addModule("Renderer", .{
+        .root_source_file = b.path("Renderer/renderer.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+
+    renderer_module.addImport("Vulkan", vulkan_module);
+    renderer_module.addImport("DeletionQueue", deletion_queue_module);
+    renderer_module.addImport("Window", window_module);
+
+    const engine_module = b.addModule("Engine", .{
+        .root_source_file = b.path("engine.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+
+    engine_module.addImport("Vulkan", vulkan_module);
+    engine_module.addImport("DeletionQueue", deletion_queue_module);
+    engine_module.addImport("Window", window_module);
+    engine_module.addImport("Renderer", renderer_module);
+
+    for ([_]*std.Build.Module{ window_module, renderer_module, engine_module, deletion_queue_module }) |m| {
+        m.addImport("Logging", logging_module);
+    }
+
+    engine_module.linkSystemLibrary("SDL3", .{});
+
+    // b.installArtifact(engine_lib);
+}
