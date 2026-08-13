@@ -16,8 +16,6 @@ pub fn build(b: *std.Build) !void {
         }),
     });
 
-    shader_compiler.root_module.linkSystemLibrary("slang", .{ .needed = true });
-
     b.installArtifact(shader_compiler);
 
     const run_shader_compiler = b.addRunArtifact(shader_compiler);
@@ -25,11 +23,8 @@ pub fn build(b: *std.Build) !void {
     run_shader_compiler.addDirectoryArg(b.path("Shaders/Source"));
     const compiled_shaders_dir = run_shader_compiler.addOutputDirectoryArg("compiled_shaders_dir");
 
-    b.getInstallStep().dependOn(&b.addInstallDirectory(.{
-        .source_dir = compiled_shaders_dir,
-        .install_dir = .{ .custom = "Shaders" },
-        .install_subdir = "",
-    }).step);
+    // to be used by game build.zig to run shader_compiler executable and make zig-out shader directory
+    b.addNamedLazyPath("compiled_shaders", compiled_shaders_dir);
 
     // engine module
 

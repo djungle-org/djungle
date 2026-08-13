@@ -1,34 +1,24 @@
 const std = @import("std");
 
-const c = @cImport({
-    @cInclude("slang.h");
-});
+pub fn main(init: std.process.Init) !void {
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
-pub fn main(init: std.process.Init.Minimal) !void {
-    var debug_allocator = std.heap.DebugAllocator(.{}){};
-    defer std.debug.assert(debug_allocator.deinit() == .ok);
+    const shader_source_path = args[1];
+    const shader_source_dir = try std.Io.Dir.openDirAbsolute(init.io, shader_source_path, .{ .iterate = true });
+    var shader_source_iter = std.Io.Dir.iterate(shader_source_dir);
 
-    const gpa = switch (@import("builtin").mode) {
-        .Debug, .ReleaseSafe => debug_allocator.allocator(),
-        .ReleaseFast, .ReleaseSmall => std.heap.c_allocator,
-    };
+    const compiled_shaders_path = args[2];
+    const compiled_shaders_dir = try std.Io.Dir.openDirAbsolute(init.io, compiled_shaders_path, .{ .iterate = true });
+    _ = compiled_shaders_dir;
 
-    var args = try init.args.iterateAllocator(gpa);
+    while (try shader_source_iter.next(init.io)) |shader_source| {
+        if (shader_source.kind != .file) continue;
 
-    while (args.next()) |arg| {
-        std.log.info("arg: {s}", .{arg});
-    }
-}
+        const shader_buf = try shader_source_dir.readFileAlloc(init.io, shader_source.name, init.arena.allocator(), .unlimited);
+        _ = shader_buf;
 
-fn compileShaders(io: std.Io) !void {
-    var dir = try std.Io.Dir.cwd().openDir(io, "Shaders/Source", .{ .iterate = true });
-    defer dir.close(io);
+        // compile shader to spirv
 
-    var it = dir.iterate();
-
-    while (try it.next(io)) |entry| {
-        if (entry.kind == .file) {
-            // entry.name
-        }
+        // write compiled binary to compiled_shaders_dir
     }
 }
