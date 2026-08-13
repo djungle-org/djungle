@@ -68,6 +68,7 @@ pub const Window = struct {
         return true;
     }
 
+    /// TEMPORARY
     pub fn clear(self: *@This()) WindowError!void {
         if (!c.SDL_SetRenderDrawColor(self._renderer, 100, 10, 50, 255)) {
             log.err(@src(), "{s}", .{c.SDL_GetError()});

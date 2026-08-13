@@ -17,6 +17,7 @@ pub const GpuDriver = enum {
 pub const RendererError = error{
     FailedToCreateGpuDevice,
     FailedToClaimWindowForGpu,
+    FailedToCreateGpuShader,
 };
 
 const debug: bool = switch (@import("builtin").mode) {
@@ -32,6 +33,9 @@ pub const Renderer = struct {
     _window: *win.Window,
 
     _gpu_device: *c.SDL_GPUDevice,
+
+    _vertex_shader: *c.SDL_GPUShader,
+    _fragment_shader: *c.SDL_GPUShader,
 
     pub fn init(self: *@This(), gpa: std.mem.Allocator, window: *win.Window, gpu_driver: GpuDriver, comptime app_name: [:0]const u8) !void {
         self._window = window;
@@ -51,6 +55,16 @@ pub const Renderer = struct {
         if (!c.SDL_ClaimWindowForGPUDevice(self._gpu_device, self._window._sdl_window)) {
             return RendererError.FailedToClaimWindowForGpu;
         }
+        //
+        // const shader_info = c.SDL_GPUShaderCreateInfo{};
+        //
+        // self._vertex_shader = c.SDL_CreateGPUShader(self._gpu_device, &shader_info) orelse {
+        //     return RendererError.FailedToCreateGpuShader;
+        // };
+        //
+        // self._fragment_shader = c.SDL_CreateGPUShader(self._gpu_device, &shader_info) orelse {
+        //     return RendererError.FailedToCreateGpuShader;
+        // };
 
         _ = gpa;
         _ = app_name;

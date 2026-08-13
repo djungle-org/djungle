@@ -30,6 +30,7 @@ pub fn main() !void {
     while (running) {
         running = window.pollEvents();
 
+        // TEMPORARY
         try window.clear();
     }
 }

@@ -1,8 +1,37 @@
 const std = @import("std");
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    // shader compiler executable
+
+    const shader_compiler = b.addExecutable(.{
+        .name = "shader_compiler",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("Shaders/shader_compiler.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
+    });
+
+    shader_compiler.root_module.linkSystemLibrary("slang", .{ .needed = true });
+
+    b.installArtifact(shader_compiler);
+
+    const run_shader_compiler = b.addRunArtifact(shader_compiler);
+
+    run_shader_compiler.addDirectoryArg(b.path("Shaders/Source"));
+    const compiled_shaders_dir = run_shader_compiler.addOutputDirectoryArg("compiled_shaders_dir");
+
+    b.getInstallStep().dependOn(&b.addInstallDirectory(.{
+        .source_dir = compiled_shaders_dir,
+        .install_dir = .{ .custom = "Shaders" },
+        .install_subdir = "",
+    }).step);
+
+    // engine module
 
     const c_module = b.addModule("C", .{
         .root_source_file = b.path("c.zig"),
@@ -57,5 +86,5 @@ pub fn build(b: *std.Build) void {
         m.addImport("Logging", logging_module);
     }
 
-    engine_module.linkSystemLibrary("SDL3", .{});
+    engine_module.linkSystemLibrary("SDL3", .{ .needed = true });
 }

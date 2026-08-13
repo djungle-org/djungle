@@ -10,7 +10,7 @@ pub fn build(b: *std.Build) void {
     }).module("Engine");
 
     const exe = b.addExecutable(.{
-        .name = "main",
+        .name = "game",
         .root_module = b.createModule(.{
             .root_source_file = b.path("main.zig"),
             .target = target,
@@ -23,7 +23,8 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
-    const run = b.addRunArtifact(exe);
+    const run_exe = b.addRunArtifact(exe);
+
     const run_step = b.step("run", "Run executable");
-    run_step.dependOn(&run.step);
+    run_step.dependOn(&run_exe.step);
 }
