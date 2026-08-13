@@ -4,10 +4,11 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const engine_module = b.dependency("Engine", .{
+    const engine_dep = b.dependency("Engine", .{
         .target = target,
         .optimize = optimize,
-    }).module("Engine");
+    });
+    const engine_module = engine_dep.module("Engine");
 
     const exe = b.addExecutable(.{
         .name = "game",
@@ -23,8 +24,22 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
+    const compiled_shaders = engine_dep.namedLazyPath("compiled_shaders");
+    // b.getInstallStep().dependOn(&b.addInstallDirectory(.{
+    //     .source_dir = compiled_shaders,
+    //     .install_dir = .{ .custom = "Shaders" },
+    //     .install_subdir = "",
+    // }).step);
+
+    const compile_shaders_step = &b.addInstallDirectory(.{
+        .source_dir = compiled_shaders,
+        .install_dir = .{ .custom = "Shaders" },
+        .install_subdir = "",
+    }).step;
+
     const run_exe = b.addRunArtifact(exe);
 
     const run_step = b.step("run", "Run executable");
+    run_step.dependOn(compile_shaders_step);
     run_step.dependOn(&run_exe.step);
 }
