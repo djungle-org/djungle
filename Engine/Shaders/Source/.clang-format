@@ -1,0 +1,11 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 90
+BreakBeforeBraces: Allman
+ReflowComments: true
+PenaltyBreakComment: 0
+PenaltyBreakOpenParenthesis: 1
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: true
