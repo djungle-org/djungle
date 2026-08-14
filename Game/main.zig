@@ -4,7 +4,7 @@ const eng = @import("Engine");
 
 const app_name = "djungle";
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     var debug_allocator = std.heap.DebugAllocator(.{}){};
     defer std.debug.assert(debug_allocator.deinit() == .ok);
 
@@ -23,7 +23,7 @@ pub fn main() !void {
     defer window.deinit();
 
     var renderer: eng.renderer.Renderer = undefined;
-    try renderer.init(gpa, &window, .Auto, app_name);
+    try renderer.init(gpa, init.io, &window, .Auto, app_name);
     defer renderer.deinit();
 
     var running = true;
