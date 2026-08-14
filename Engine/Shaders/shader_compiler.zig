@@ -15,33 +15,51 @@ pub fn main(init: std.process.Init) !void {
     const compiled_shaders_path = args[2];
 
     while (try shader_source_iter.next(init.io)) |shader_source| {
+        // handle sub directories in future
         if (shader_source.kind != .file) continue;
-
-        if (!(std.mem.endsWith(u8, shader_source.name, ".vert.slang") or std.mem.endsWith(u8, shader_source.name, ".frag.slang"))) {
-            continue;
-        }
-
-        // compile shader to spirv
 
         const shader_path = try std.Io.Dir.path.join(init.arena.allocator(), &.{ shader_source_path, shader_source.name });
 
         const output_path = try std.mem.join(init.arena.allocator(), "", &.{ shader_source.name, ".spv" });
         const output_full_path = try std.Io.Dir.path.join(init.arena.allocator(), &.{ compiled_shaders_path, output_path });
 
-        const slangc_args = [_][]const u8{ "slangc", shader_path, "-target", "spirv", "-profile", "spirv_1_4", "-emit-spirv-directly", "-fvk-use-entrypoint-name", "-entry", "main", "-o", output_full_path };
-
-        const result = try std.process.run(init.arena.allocator(), init.io, .{
-            .argv = &slangc_args,
-        });
-
-        defer {
-            init.arena.allocator().free(result.stdout);
-            init.arena.allocator().free(result.stderr);
+        if (std.mem.endsWith(u8, shader_source.name, ".vert.slang")) {
+            try slangcCompile(init.arena.allocator(), init.io, shader_path, output_full_path, false);
+        } else if (std.mem.endsWith(u8, shader_source.name, ".frag.slang")) {
+            try slangcCompile(init.arena.allocator(), init.io, shader_path, output_full_path, false);
+        } else if (std.mem.endsWith(u8, shader_source.name, ".pair.slang")) {
+            try slangcCompile(init.arena.allocator(), init.io, shader_path, output_full_path, true);
+        } else {
+            continue;
         }
+    }
+}
 
-        if (result.term != .exited or result.term.exited != 0) {
-            std.log.err("slangc stderr: {s}\n", .{result.stderr});
-            return ShaderCompilerError.ShaderCompileFailed;
-        }
+fn slangcCompile(allocator: std.mem.Allocator, io: std.Io, shader_path: []const u8, output_path: []const u8, pair: bool) !void {
+    var slangc_args = try std.ArrayList([]const u8).initCapacity(allocator, 12);
+    defer slangc_args.deinit(allocator);
+
+    try slangc_args.appendSlice(allocator, &.{ "slangc", shader_path, "-target", "spirv", "-profile", "spirv_1_4", "-emit-spirv-directly", "-fvk-use-entrypoint-name" });
+
+    if (pair) {
+        try slangc_args.appendSlice(allocator, &.{ "-entry", "vertMain", "-entry", "fragMain" });
+    } else {
+        try slangc_args.appendSlice(allocator, &.{ "-entry", "main" });
+    }
+
+    try slangc_args.appendSlice(allocator, &.{ "-o", output_path });
+
+    const result = try std.process.run(allocator, io, .{
+        .argv = slangc_args.items,
+    });
+
+    defer {
+        allocator.free(result.stdout);
+        allocator.free(result.stderr);
+    }
+
+    if (result.term != .exited or result.term.exited != 0) {
+        std.log.err("slangc stderr: {s}\n", .{result.stderr});
+        return ShaderCompilerError.ShaderCompileFailed;
     }
 }

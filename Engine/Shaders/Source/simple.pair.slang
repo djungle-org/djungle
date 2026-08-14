@@ -1,5 +1,3 @@
-import common;
-
 struct UniformBuffer
 {
     float4x4 model;
@@ -15,8 +13,15 @@ struct VSInput
     float2 texCoord;
 };
 
+public struct VSOutput
+{
+    public float4 pos : SV_Position;
+    public float3 col;
+    public float2 texCoord;
+}
+
 [shader("vertex")]
-VSOutput main(VSInput input)
+VSOutput vertMain(VSInput input)
 {
     VSOutput output;
     output.pos =
@@ -24,4 +29,13 @@ VSOutput main(VSInput input)
     output.col      = input.col;
     output.texCoord = input.texCoord;
     return output;
+}
+
+Sampler2D texture;
+
+[shader("fragment")]
+float4 fragMain(VSOutput vertIn) : SV_Target
+{
+    // return float4(vertIn.col, 1.0);
+    return texture.Sample(vertIn.texCoord);
 }
