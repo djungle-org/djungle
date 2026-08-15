@@ -37,7 +37,7 @@ pub const Renderer = struct {
 
     _shaders: ShaderRegistry,
 
-    pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, window: *win.Window, gpu_driver: GpuDriver, comptime app_name: [:0]const u8) !void {
+    pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, window: *win.Window, gpu_driver: GpuDriver, spirv_bin_dir_path: []const u8) !void {
         self._window = window;
 
         self._shaders = try ShaderRegistry.init(gpa);
@@ -60,9 +60,7 @@ pub const Renderer = struct {
             return RendererError.FailedToClaimWindowForGpu;
         }
 
-        try self.loadShaders(io, gpa);
-
-        _ = app_name;
+        try self.loadShaders(io, gpa, spirv_bin_dir_path);
     }
 
     pub fn deinit(self: *@This()) void {
@@ -71,15 +69,8 @@ pub const Renderer = struct {
         self._shaders.deinit();
     }
 
-    fn loadShaders(self: *@This(), io: std.Io, gpa: std.mem.Allocator) !void {
+    fn loadShaders(self: *@This(), io: std.Io, _: std.mem.Allocator, spirv_bin_dir_path: []const u8) !void {
         self._shaders.clearRetainingCapacity();
-
-        var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
-        const len = try std.process.executableDirPath(io, &exe_dir_buf);
-        const exe_dir_path = exe_dir_buf[0..len];
-
-        const spirv_bin_dir_path = try std.Io.Dir.path.join(gpa, &.{ exe_dir_path, "..", "Shaders" });
-        defer gpa.free(spirv_bin_dir_path);
 
         const spirv_bin_dir = try std.Io.Dir.openDirAbsolute(io, spirv_bin_dir_path, .{ .iterate = true });
         defer spirv_bin_dir.close(io);
