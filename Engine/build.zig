@@ -77,7 +77,7 @@ pub fn build(b: *std.Build) !void {
     engine_module.addImport("Window", window_module);
     engine_module.addImport("Renderer", renderer_module);
 
-    for ([_]*std.Build.Module{ window_module, renderer_module, engine_module, deletion_queue_module }) |m| {
+    for ([_]*std.Build.Module{ window_module, renderer_module, engine_module, deletion_queue_module, c_module }) |m| {
         m.addImport("Logging", logging_module);
     }
 

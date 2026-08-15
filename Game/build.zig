@@ -37,9 +37,10 @@ pub fn build(b: *std.Build) void {
         .install_subdir = "",
     }).step;
 
-    const run_exe = b.addRunArtifact(exe);
+    const run_cmd = b.addSystemCommand(&.{b.getInstallPath(.bin, "game")});
+    run_cmd.step.dependOn(b.getInstallStep());
 
     const run_step = b.step("run", "Run executable");
     run_step.dependOn(compile_shaders_step);
-    run_step.dependOn(&run_exe.step);
+    run_step.dependOn(&run_cmd.step);
 }
