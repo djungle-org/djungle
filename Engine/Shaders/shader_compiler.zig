@@ -11,12 +11,12 @@ const ShaderKind = enum {
 };
 
 const ShaderFile = struct {
-    name: [:0]const u8,
-    path: [:0]const u8,
-    entry: [:0]const u8,
+    name: []const u8,
+    path: []const u8,
+    entry: []const u8,
     kind: ShaderKind,
 
-    pub fn compile(self: @This(), allocator: std.mem.Allocator, io: std.Io, shader_source_path: []const u8, compiled_shaders_path: []const u8) !void {
+    pub fn compile(self: @This(), allocator: std.mem.Allocator, io: std.Io, shader_source_path: []const u8, compiled_shaders_path: []const u8) ![]u8 {
         const shader_absolute_path = try std.Io.Dir.path.join(allocator, &.{ shader_source_path, self.path });
 
         const binary_name = try std.mem.join(allocator, "", &.{ self.name, ".spv" });
@@ -37,6 +37,8 @@ const ShaderFile = struct {
             std.log.err("slangc stderr: {s}\n", .{result.stderr});
             return ShaderCompilerError.ShaderCompileFailed;
         }
+
+        return binary_name;
     }
 };
 
@@ -49,7 +51,7 @@ pub fn main(init: std.process.Init) !void {
     const shader_src_path = args[1];
     const compiled_shaders_path = args[2];
 
-    var shader_src_dir = try std.Io.Dir.openDirAbsolute(io, shader_src_path, .{});
+    const shader_src_dir = try std.Io.Dir.openDirAbsolute(io, shader_src_path, .{});
     defer shader_src_dir.close(io);
 
     const shaders_zon_buf = try shader_src_dir.readFileAlloc(io, "shaders.zon", arena, .unlimited);
@@ -58,59 +60,20 @@ pub fn main(init: std.process.Init) !void {
     const shader_files = try std.zon.parse.fromSliceAlloc([]ShaderFile, arena, shaders_zon_buf_0, null, .{});
 
     for (shader_files) |*shader_file| {
-        try shader_file.compile(arena, io, shader_src_path, compiled_shaders_path);
+        const binary_name = try shader_file.compile(arena, io, shader_src_path, compiled_shaders_path);
+        shader_file.path = binary_name;
     }
 
-    // const shader_source_path = args[1];
-    // const shader_source_dir = try std.Io.Dir.openDirAbsolute(init.io, shader_source_path, .{ .iterate = true });
-    // defer shader_source_dir.close(init.io);
-    // var shader_source_iter = std.Io.Dir.iterate(shader_source_dir);
-    //
-    // const compiled_shaders_path = args[2];
+    const binaries_zon_path = try std.Io.Dir.path.join(arena, &.{ compiled_shaders_path, "shader_binaries.zon" });
+    const binaries_zon = try std.Io.Dir.createFileAbsolute(io, binaries_zon_path, .{});
+    defer binaries_zon.close(io);
 
-    // var shader_data = std.ArrayList(ShaderData).empty;
-    // defer shader_data.deinit(alloc);
+    var writer = std.Io.Writer.Allocating.init(arena);
+    defer writer.deinit();
 
-    // while (try shader_source_iter.next(init.io)) |shader_source| {
-    //     // handle sub directories in future
-    //     if (shader_source.kind != .file) return error.NotAFile;
-    //
-    //     const shader_path = try std.Io.Dir.path.join(alloc, &.{ shader_source_path, shader_source.name });
-    //
-    //     const output_path = try std.mem.join(alloc, "", &.{ shader_source.name, ".spv" });
-    //     const output_full_path = try std.Io.Dir.path.join(alloc, &.{ compiled_shaders_path, output_path });
-    //
-    //     if (std.mem.endsWith(u8, shader_source.name, ".vert.slang")) {
-    //         try shader_data.append(alloc, .{
-    //             .path = output_path,
-    //             .kind = .Vertex,
-    //         });
-    //
-    //         try slangcCompile(alloc, init.io, shader_path, output_full_path, "main");
-    //     } else if (std.mem.endsWith(u8, shader_source.name, ".frag.slang")) {
-    //         try shader_data.append(alloc, .{
-    //             .path = output_path,
-    //             .kind = .Fragment,
-    //         });
-    //
-    //         try slangcCompile(alloc, init.io, shader_path, output_full_path, "main");
-    //     } else {
-    //         return error.IncorrectFileExtension;
-    //     }
-    // }
+    try std.zon.stringify.serialize(shader_files, .{}, &writer.writer);
 
-    // const compiled_shaders_dir = try std.Io.Dir.openDirAbsolute(init.io, compiled_shaders_path, .{ .iterate = true });
-    // defer compiled_shaders_dir.close(init.io);
-    //
-    // const shader_zon = try compiled_shaders_dir.createFile(init.io, "shaders.zon", .{});
-    // defer shader_zon.close(init.io);
-    //
-    // var writer = std.Io.Writer.Allocating.init(alloc);
-    // defer writer.deinit();
-    //
-    // try std.zon.stringify.serialize(shader_data.items, .{}, &writer.writer);
-    //
-    // const zon_text = writer.writer.buffered();
-    //
-    // try shader_zon.writePositionalAll(init.io, zon_text, 0);
+    const zon_buf = writer.writer.buffered();
+
+    try binaries_zon.writePositionalAll(io, zon_buf, 0);
 }
