@@ -5,13 +5,7 @@ const eng = @import("Engine");
 const app_name = "djungle";
 
 pub fn main(init: std.process.Init) !void {
-    var debug_allocator = std.heap.DebugAllocator(.{}){};
-    defer std.debug.assert(debug_allocator.deinit() == .ok);
-
-    const gpa = switch (@import("builtin").mode) {
-        .Debug, .ReleaseSafe => debug_allocator.allocator(),
-        .ReleaseFast, .ReleaseSmall => std.heap.c_allocator,
-    };
+    const gpa = init.gpa;
 
     var array_list = std.ArrayList(u32).empty;
     defer array_list.deinit(gpa);
