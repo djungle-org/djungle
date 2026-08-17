@@ -20,8 +20,11 @@ pub fn main(init: std.process.Init) !void {
     const len = try std.process.executableDirPath(init.io, &exe_dir_buf);
     const exe_dir_path = exe_dir_buf[0..len];
 
+    const spirv_bin_dir_path = try std.Io.Dir.path.join(gpa, &.{ exe_dir_path, "../Shaders" });
+    defer gpa.free(spirv_bin_dir_path);
+
     var renderer: eng.renderer.Renderer = undefined;
-    try renderer.init(gpa, init.io, &window, .Auto, exe_dir_path);
+    try renderer.init(gpa, init.io, &window, .Auto, spirv_bin_dir_path);
     defer renderer.deinit();
 
     var running = true;

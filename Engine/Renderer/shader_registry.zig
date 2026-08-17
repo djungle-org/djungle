@@ -3,7 +3,7 @@ const std = @import("std");
 const c = @import("C").c;
 const log = @import("Logging");
 
-pub const ShaderError = enum {
+pub const ShaderError = error{
     FailedToCreateGpuShader,
 };
 
@@ -18,8 +18,8 @@ pub const Shader = struct {
     pub fn create(gpu_device: *c.SDL_GPUDevice, code_size: usize, code: []const u8, entrypoint_name: []const u8, shader_kind: ShaderKind) !@This() {
         const shader_info = c.SDL_GPUShaderCreateInfo{
             .code_size = code_size,
-            .code = code,
-            .entrypoint = entrypoint_name,
+            .code = @ptrCast(code),
+            .entrypoint = @ptrCast(entrypoint_name),
             .stage = switch (shader_kind) {
                 .Vertex => c.SDL_GPU_SHADERSTAGE_VERTEX,
                 .Fragment => c.SDL_GPU_SHADERSTAGE_FRAGMENT,
@@ -38,6 +38,10 @@ pub const Shader = struct {
             },
         };
     }
+
+    pub fn deinit(self: *@This(), gpu_device: *c.SDL_GPUDevice) void {
+        c.SDL_ReleaseGPUShader(gpu_device, self._sdl_gpu_shader);
+    }
 };
 
 pub const ShaderRegistry = struct {
@@ -49,7 +53,13 @@ pub const ShaderRegistry = struct {
         };
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: *@This(), gpu_device: *c.SDL_GPUDevice) void {
+        var iter = self._shader_map.iterator();
+
+        while (iter.next()) |entry| {
+            entry.value_ptr.deinit(gpu_device);
+        }
+
         self._shader_map.deinit();
     }
 
@@ -57,7 +67,7 @@ pub const ShaderRegistry = struct {
         self._shader_map.clearRetainingCapacity();
     }
 
-    pub fn put(self: *@This(), name: [:0]const u8, shader: Shader) !void {
+    pub fn put(self: *@This(), name: []const u8, shader: Shader) !void {
         try self._shader_map.put(name, shader);
     }
 };

@@ -3,13 +3,21 @@ pub const c = @cImport({
     @cInclude("SDL3/SDL_gpu.h");
 });
 
+const std = @import("std");
 const log = @import("Logging");
 
-pub fn sdlCheck(comptime T: type, check: ?T, fail: anyerror) !T {
+pub fn sdlCheck(comptime src: std.builtin.SourceLocation, comptime T: type, check: ?T, fail: anyerror) !T {
     if (!check) {
-        log.err(@src(), "{s}", .{c.SDL_GetError()});
+        log.err(src, "{s}", .{c.SDL_GetError()});
         return fail;
     }
 
     return check.?;
+}
+
+pub fn sdlCheckBool(comptime src: std.builtin.SourceLocation, check: bool, fail: anyerror) !void {
+    if (!check) {
+        log.err(src, "{s}", .{c.SDL_GetError()});
+        return fail;
+    }
 }
