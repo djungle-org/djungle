@@ -14,6 +14,7 @@ pub const ShaderKind = enum {
 
 pub const Shader = struct {
     _sdl_gpu_shader: *c.SDL_GPUShader,
+    _kind: ShaderKind,
 
     pub fn create(gpu_device: *c.SDL_GPUDevice, code_size: usize, code: []const u8, entrypoint_name: []const u8, shader_kind: ShaderKind) !@This() {
         const shader_info = c.SDL_GPUShaderCreateInfo{
@@ -36,6 +37,7 @@ pub const Shader = struct {
                 log.err(@src(), "{s}", .{c.SDL_GetError()});
                 return ShaderError.FailedToCreateGpuShader;
             },
+            ._kind = shader_kind,
         };
     }
 
@@ -69,5 +71,9 @@ pub const ShaderRegistry = struct {
 
     pub fn put(self: *@This(), name: []const u8, shader: Shader) !void {
         try self._shader_map.put(name, shader);
+    }
+
+    pub fn get(self: *@This(), shader_name: []const u8) ?Shader {
+        return self._shader_map.get(shader_name);
     }
 };

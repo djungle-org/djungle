@@ -13,6 +13,8 @@ const Shader = reg.Shader;
 const ShaderKind = reg.ShaderKind;
 const ShaderRegistry = reg.ShaderRegistry;
 
+const buf = @import("buffer.zig");
+
 /// Auto to auto choose driver, Vulkan for Linux, Direct3D12 for Windows, Metal for MacOS
 pub const GpuDriver = enum {
     Auto,
