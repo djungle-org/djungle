@@ -90,3 +90,21 @@ pub fn main(init: std.process.Init) !void {
 
     try binaries_zon.writePositionalAll(io, zon_buf, 0);
 }
+
+test "parses shader zon with correct fields" {
+    const zon_text: []const u8 =
+        \\.{
+        \\    .{ .name = "simple_frag", .path = "simple_frag.slang", .entry = "fragMain", .kind = .Fragment },
+        \\}
+    ;
+
+    const zon_text_0 = try std.mem.Allocator.dupeSentinel(std.testing.allocator, u8, zon_text, 0);
+    defer std.testing.allocator.free(zon_text_0);
+
+    const parsed = try std.zon.parse.fromSliceAlloc([]ShaderFile, std.testing.allocator, zon_text_0, null, .{});
+    defer std.zon.parse.free(std.testing.allocator, parsed);
+
+    try std.testing.expectEqual(1, parsed.len);
+    try std.testing.expectEqualStrings("simple_frag", parsed[0].name);
+    try std.testing.expectEqual(ShaderKind.Fragment, parsed[0].kind);
+}

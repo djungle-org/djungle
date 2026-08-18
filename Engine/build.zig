@@ -26,6 +26,14 @@ pub fn build(b: *std.Build) !void {
     // to be used by game build.zig to run shader_compiler executable and make zig-out shader directory
     b.addNamedLazyPath("compiled_shaders", compiled_shaders_dir);
 
+    const shader_compiler_tests = b.addTest(.{
+        .root_module = shader_compiler.root_module,
+    });
+
+    const run_shader_compiler_tests = b.addRunArtifact(shader_compiler_tests);
+    const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&run_shader_compiler_tests.step);
+
     // engine module
 
     const c_module = b.addModule("C", .{
