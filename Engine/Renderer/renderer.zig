@@ -27,11 +27,19 @@ pub const RendererError = error{
     FailedToCreateGpuDevice,
     FailedToClaimWindowForGpu,
     FailedToCreateGpuShader,
+    FailedToAcquireGpuCommandBuffer,
+    FailedToBeginGpuCopyPass,
 };
 
 const debug: bool = switch (@import("builtin").mode) {
     .Debug, .ReleaseSafe => true,
     .ReleaseFast, .ReleaseSmall => false,
+};
+
+const Vec3 = @Vector(3, f32);
+
+const Vertex = struct {
+    pos: Vec3,
 };
 
 pub const Renderer = struct {
@@ -54,16 +62,32 @@ pub const Renderer = struct {
         };
 
         var vulkan_options = std.mem.zeroes(c.SDL_GPUVulkanOptions);
-        const vulkan_api_version: u32 = (0 << 29) | (1 << 22) | (4 << 12) | 0; // vulkan 1.4.0
+        const vulkan_api_version: u32 = (0 << 29) | (1 << 22) | (3 << 12) | 0; // vulkan 1.4.0
         vulkan_options.vulkan_api_version = vulkan_api_version;
 
         const props = c.SDL_CreateProperties();
         defer c.SDL_DestroyProperties(props);
 
-        try sdlCheckBool(@src(), c.SDL_SetPointerProperty(props, c.SDL_PROP_GPU_DEVICE_CREATE_VULKAN_OPTIONS_POINTER, &vulkan_options), error.FailedToSetSdlPointerProperty);
-        try sdlCheckBool(@src(), c.SDL_SetBooleanProperty(props, c.SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, true), error.FailedToSetSdlBoolProperty);
-        try sdlCheckBool(@src(), c.SDL_SetBooleanProperty(props, c.SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, debug), error.FailedToSetSdlPointerProperty);
-        try sdlCheckBool(@src(), c.SDL_SetStringProperty(props, c.SDL_PROP_GPU_DEVICE_CREATE_NAME_STRING, @ptrCast(gpu_driver_name)), error.FailedToSetSdlPointerProperty);
+        try sdlCheckBool(
+            @src(),
+            c.SDL_SetPointerProperty(props, c.SDL_PROP_GPU_DEVICE_CREATE_VULKAN_OPTIONS_POINTER, &vulkan_options),
+            error.FailedToSetSdlPointerProperty,
+        );
+        try sdlCheckBool(
+            @src(),
+            c.SDL_SetBooleanProperty(props, c.SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, true),
+            error.FailedToSetSdlBoolProperty,
+        );
+        try sdlCheckBool(
+            @src(),
+            c.SDL_SetBooleanProperty(props, c.SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, debug),
+            error.FailedToSetSdlPointerProperty,
+        );
+        try sdlCheckBool(
+            @src(),
+            c.SDL_SetStringProperty(props, c.SDL_PROP_GPU_DEVICE_CREATE_NAME_STRING, @ptrCast(gpu_driver_name)),
+            error.FailedToSetSdlPointerProperty,
+        );
 
         // SPIRV for shaders so we can use slang
         self._gpu_device = c.SDL_CreateGPUDeviceWithProperties(props) orelse {
@@ -77,6 +101,43 @@ pub const Renderer = struct {
         }
 
         try self.loadShaders(io, gpa, spirv_bin_dir_path);
+
+        const command_buffer = try sdlCheck(
+            @src(),
+            *c.SDL_GPUCommandBuffer,
+            c.SDL_AcquireGPUCommandBuffer(self._gpu_device),
+            RendererError.FailedToAcquireGpuCommandBuffer,
+        );
+
+        const vertices = [_]Vertex{
+            .{ .pos = .{ -0.5, 0.0, 0 } },
+            .{ .pos = .{ 0.5, 0.0, 0 } },
+            .{ .pos = .{ 0, 0.5, 0 } },
+        };
+
+        const buf_size = @sizeOf(@TypeOf(vertices));
+
+        const vertex_buffer = try buf.Buffer.create(self._gpu_device, .Vertex, buf_size);
+        defer vertex_buffer.deinit(self._gpu_device);
+
+        const transfer_buffer = try buf.transfer.Upload.create(self._gpu_device, buf_size);
+        defer transfer_buffer.deinit(self._gpu_device);
+
+        try transfer_buffer.upload(self._gpu_device, Vertex, &vertices);
+
+        const copy_pass = try sdlCheck(
+            @src(),
+            *c.SDL_GPUCopyPass,
+            c.SDL_BeginGPUCopyPass(command_buffer),
+            RendererError.FailedToBeginGpuCopyPass,
+        );
+
+        try vertex_buffer.upload(copy_pass, transfer_buffer, 0, .{
+            .offset = 0,
+            .size = buf_size,
+        });
+
+        c.SDL_EndGPUCopyPass(copy_pass);
     }
 
     pub fn deinit(self: *@This()) void {
@@ -110,7 +171,13 @@ pub const Renderer = struct {
         for (binary_files) |binary_file| {
             const binary_buf = try spirv_bin_dir.readFileAlloc(io, binary_file.path, arena, .unlimited);
 
-            const shader = try Shader.create(self._gpu_device, binary_buf.len * @sizeOf(u8), binary_buf, binary_file.entry, binary_file.kind);
+            const shader = try Shader.create(
+                self._gpu_device,
+                binary_buf.len * @sizeOf(u8),
+                binary_buf,
+                binary_file.entry,
+                binary_file.kind,
+            );
 
             try self._shaders.put(binary_file.name, shader);
         }

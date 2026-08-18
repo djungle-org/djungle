@@ -22,7 +22,20 @@ const ShaderFile = struct {
         const binary_name = try std.mem.join(allocator, "", &.{ self.name, ".spv" });
         const binary_output_path = try std.Io.Dir.path.join(allocator, &.{ compiled_shaders_path, binary_name });
 
-        const slangc_args = [_][]const u8{ "slangc", shader_absolute_path, "-target", "spirv", "-profile", "spirv_1_4", "-emit-spirv-directly", "-fvk-use-entrypoint-name", "-entry", self.entry, "-o", binary_output_path };
+        const slangc_args = [_][]const u8{
+            "slangc",
+            shader_absolute_path,
+            "-target",
+            "spirv",
+            "-profile",
+            "spirv_1_6",
+            "-emit-spirv-directly",
+            "-fvk-use-entrypoint-name",
+            "-entry",
+            self.entry,
+            "-o",
+            binary_output_path,
+        };
 
         const result = try std.process.run(allocator, io, .{
             .argv = &slangc_args,
