@@ -44,6 +44,14 @@ pub const Shader = struct {
     pub fn deinit(self: *@This(), gpu_device: *c.SDL_GPUDevice) void {
         c.SDL_ReleaseGPUShader(gpu_device, self._sdl_gpu_shader);
     }
+
+    pub fn sdlShader(self: *@This()) *c.SDL_GPUShader {
+        return self._sdl_gpu_shader;
+    }
+};
+
+pub const ShaderRegistryError = error{
+    FailedToGetShaderFromRegistry,
 };
 
 pub const ShaderRegistry = struct {
@@ -73,7 +81,9 @@ pub const ShaderRegistry = struct {
         try self._shader_map.put(name, shader);
     }
 
-    pub fn get(self: *@This(), shader_name: []const u8) ?Shader {
-        return self._shader_map.get(shader_name);
+    pub fn get(self: *@This(), shader_name: []const u8) !Shader {
+        return self._shader_map.get(shader_name) orelse {
+            return ShaderRegistryError.FailedToGetShaderFromRegistry;
+        };
     }
 };

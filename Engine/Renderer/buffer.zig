@@ -69,6 +69,10 @@ pub const Buffer = struct {
 
         c.SDL_UploadToGPUBuffer(copy_pass, &transfer_buffer_loc, &sdl_buffer_region, true);
     }
+
+    pub fn sdlBuffer(self: *@This()) *c.SDL_GPUBuffer {
+        return self._sdl_buffer;
+    }
 };
 
 pub const transfer = struct {

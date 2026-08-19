@@ -14,6 +14,7 @@ const ShaderKind = reg.ShaderKind;
 const ShaderRegistry = reg.ShaderRegistry;
 
 const buf = @import("buffer.zig");
+const tex = @import("textures.zig");
 
 /// Auto to auto choose driver, Vulkan for Linux, Direct3D12 for Windows, Metal for MacOS
 pub const GpuDriver = enum {
@@ -30,6 +31,7 @@ pub const RendererError = error{
     FailedToAcquireGpuCommandBuffer,
     FailedToBeginGpuCopyPass,
     FailedToSubmitGpuCommandBuffer,
+    FailedToCreateGpuGraphicsPipeline,
 };
 
 const debug: bool = switch (@import("builtin").mode) {
@@ -47,6 +49,8 @@ pub const Renderer = struct {
     _window: *win.Window,
 
     _gpu_device: *c.SDL_GPUDevice,
+
+    _graphics_pipeline: *c.SDL_GPUGraphicsPipeline,
 
     _shaders: ShaderRegistry,
 
@@ -139,6 +143,51 @@ pub const Renderer = struct {
         });
 
         c.SDL_EndGPUCopyPass(copy_pass);
+
+        const color_target_info = c.SDL_GPUColorTargetInfo{};
+
+        const depth_stencil_target_info = c.SDL_GPUDepthStencilTargetInfo{};
+
+        const render_pass = c.SDL_BeginGPURenderPass(
+            command_buffer,
+            &color_target_info,
+            1,
+            &depth_stencil_target_info,
+        );
+        defer c.SDL_EndGPURenderPass(render_pass);
+
+        const buffer_bindings = [_]c.SDL_GPUBufferBinding{
+            .{
+                .buffer = vertex_buffer.sdlBuffer(),
+                .offset = 0,
+            },
+        };
+
+        c.SDL_BindGPUVertexBuffers(render_pass, 0, &buffer_bindings, buffer_bindings.len);
+
+        var vert_shader = try self._shaders.get("simple_vert");
+        var frag_shader = try self._shaders.get("simple_frag");
+
+        const gfx_pipeline_info = c.SDL_GPUGraphicsPipelineCreateInfo{
+            .vertex_shader = vert_shader.sdlShader(),
+            .fragment_shader = frag_shader.sdlShader(),
+            .vertex_input_state = .{
+                .num_vertex_buffers = 1,
+                // finish this
+            },
+            .primitive_type = c.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+            .rasterizer_state = .{},
+            .multisample_state = .{},
+            .depth_stencil_state = .{},
+            .target_info = .{},
+        };
+
+        self._graphics_pipeline = try sdlCheck(
+            @src(),
+            *c.SDL_GPUGraphicsPipeline,
+            c.SDL_CreateGPUGraphicsPipeline(self._gpu_device, &gfx_pipeline_info),
+            RendererError.FailedToCreateGpuGraphicsPipeline,
+        );
 
         try sdlCheckBool(@src(), c.SDL_SubmitGPUCommandBuffer(command_buffer), RendererError.FailedToSubmitGpuCommandBuffer);
     }
