@@ -29,6 +29,7 @@ pub const RendererError = error{
     FailedToCreateGpuShader,
     FailedToAcquireGpuCommandBuffer,
     FailedToBeginGpuCopyPass,
+    FailedToSubmitGpuCommandBuffer,
 };
 
 const debug: bool = switch (@import("builtin").mode) {
@@ -117,10 +118,10 @@ pub const Renderer = struct {
 
         const buf_size = @sizeOf(@TypeOf(vertices));
 
-        const vertex_buffer = try buf.Buffer.create(self._gpu_device, .Vertex, buf_size);
+        var vertex_buffer = try buf.Buffer.create(self._gpu_device, .Vertex, buf_size);
         defer vertex_buffer.deinit(self._gpu_device);
 
-        const transfer_buffer = try buf.transfer.Upload.create(self._gpu_device, buf_size);
+        var transfer_buffer = try buf.transfer.Upload.create(self._gpu_device, buf_size);
         defer transfer_buffer.deinit(self._gpu_device);
 
         try transfer_buffer.upload(self._gpu_device, Vertex, &vertices);
@@ -138,6 +139,8 @@ pub const Renderer = struct {
         });
 
         c.SDL_EndGPUCopyPass(copy_pass);
+
+        try sdlCheckBool(@src(), c.SDL_SubmitGPUCommandBuffer(command_buffer), RendererError.FailedToSubmitGpuCommandBuffer);
     }
 
     pub fn deinit(self: *@This()) void {

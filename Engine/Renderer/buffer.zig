@@ -51,11 +51,11 @@ pub const Buffer = struct {
         };
     }
 
-    pub fn deinit(self: @This(), gpu_device: *c.SDL_GPUDevice) void {
+    pub fn deinit(self: *@This(), gpu_device: *c.SDL_GPUDevice) void {
         c.SDL_ReleaseGPUBuffer(gpu_device, self._sdl_buffer);
     }
 
-    pub fn upload(self: @This(), copy_pass: *c.SDL_GPUCopyPass, transfer_buffer: transfer.Upload, transfer_buffer_offset: usize, buffer_region: Region) !void {
+    pub fn upload(self: *@This(), copy_pass: *c.SDL_GPUCopyPass, transfer_buffer: transfer.Upload, transfer_buffer_offset: usize, buffer_region: Region) !void {
         const transfer_buffer_loc = c.SDL_GPUTransferBufferLocation{
             .transfer_buffer = transfer_buffer._sdl_transfer_buffer,
             .offset = @intCast(transfer_buffer_offset),
@@ -91,11 +91,11 @@ pub const transfer = struct {
             };
         }
 
-        pub fn deinit(self: @This(), gpu_device: *c.SDL_GPUDevice) void {
+        pub fn deinit(self: *@This(), gpu_device: *c.SDL_GPUDevice) void {
             c.SDL_ReleaseGPUTransferBuffer(gpu_device, self._sdl_transfer_buffer);
         }
 
-        pub fn upload(self: @This(), gpu_device: *c.SDL_GPUDevice, comptime T: type, buffer: []const T) !void {
+        pub fn upload(self: *@This(), gpu_device: *c.SDL_GPUDevice, comptime T: type, buffer: []const T) !void {
             var mem = try sdlCheck(
                 @src(),
                 *anyopaque,
