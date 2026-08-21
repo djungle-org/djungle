@@ -33,6 +33,6 @@ pub fn main(init: std.process.Init) !void {
     while (running) {
         running = window.pollEvents();
 
-        // try renderer.render();
+        try renderer.render();
     }
 }

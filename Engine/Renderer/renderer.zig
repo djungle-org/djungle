@@ -52,6 +52,8 @@ const Vertex = struct {
 pub const Renderer = struct {
     _window: *win.Window,
     _swapchain_format: c_uint,
+    _swapchain_tex_w: u32,
+    _swapchain_tex_h: u32,
     _gpu_device: *c.SDL_GPUDevice,
     _depth_tex: tex.Texture,
     _graphics_pipeline: *c.SDL_GPUGraphicsPipeline,
@@ -112,67 +114,27 @@ pub const Renderer = struct {
 
         try self.loadShaders(io, gpa, spirv_bin_dir_path);
 
-        const command_buffer = try sdlCheck(
-            @src(),
-            *c.SDL_GPUCommandBuffer,
-            c.SDL_AcquireGPUCommandBuffer(self._gpu_device),
-            RendererError.FailedToAcquireGpuCommandBuffer,
+        self._depth_tex = try tex.Texture.create(
+            self._gpu_device,
+            ._2d,
+            .D32_Float,
+            .{ .depth_stencil_target = true },
+            window._width,
+            window._height,
+            ._1,
         );
 
-        const vertices = [_]Vertex{
-            .{ .pos = .{ -0.5, 0.0 } },
-            .{ .pos = .{ 0.5, 0.0 } },
-            .{ .pos = .{ 0, 0.5 } },
+        const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
+            .slot = 0,
+            .pitch = @sizeOf(Vertex),
+            .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
         };
 
-        const buf_size = @sizeOf(@TypeOf(vertices));
-
-        var vertex_buffer = try buf.Buffer.create(self._gpu_device, .Vertex, buf_size);
-        defer vertex_buffer.deinit(self._gpu_device);
-
-        var transfer_buffer = try buf.transfer.Upload.create(self._gpu_device, buf_size);
-        defer transfer_buffer.deinit(self._gpu_device);
-
-        try transfer_buffer.upload(self._gpu_device, Vertex, &vertices);
-
-        const copy_pass = try sdlCheck(
-            @src(),
-            *c.SDL_GPUCopyPass,
-            c.SDL_BeginGPUCopyPass(command_buffer),
-            RendererError.FailedToBeginGpuCopyPass,
-        );
-
-        try vertex_buffer.upload(copy_pass, transfer_buffer, 0, .{
+        const vertex_attrib = c.SDL_GPUVertexAttribute{
+            .location = 0,
+            .buffer_slot = 0,
+            .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
             .offset = 0,
-            .size = buf_size,
-        });
-
-        c.SDL_EndGPUCopyPass(copy_pass);
-
-        var swapchain_tex_w: u32 = undefined;
-        var swapchain_tex_h: u32 = undefined;
-        var swapchain_tex: ?*c.SDL_GPUTexture = null;
-        try sdlCheckBool(
-            @src(),
-            c.SDL_WaitAndAcquireGPUSwapchainTexture(
-                command_buffer,
-                self._window.toSdl(),
-                &swapchain_tex,
-                &swapchain_tex_w,
-                &swapchain_tex_h,
-            ),
-            RendererError.FailedToAcquireSwapchainTexture,
-        );
-
-        const color_target_info = c.SDL_GPUColorTargetInfo{
-            .texture = swapchain_tex.?,
-            .mip_level = 0,
-            .layer_or_depth_plane = 0,
-            .clear_color = .{ .r = 0.5, .g = 0.2, .b = 0.7, .a = 1.0 },
-            .load_op = c.SDL_GPU_LOADOP_CLEAR,
-            .store_op = c.SDL_GPU_STOREOP_STORE,
-            .resolve_texture = null, // resolve fields can be ignored since a resolve store_op is not being used
-            .cycle = true,
         };
 
         const color_target_description = c.SDL_GPUColorTargetDescription{
@@ -187,63 +149,6 @@ pub const Renderer = struct {
                 .alpha_blend_op = c.SDL_GPU_BLENDOP_ADD,
                 .enable_color_write_mask = false,
             },
-        };
-
-        self._depth_tex = try tex.Texture.create(
-            self._gpu_device,
-            ._2d,
-            .D32_Float,
-            .{ .depth_stencil_target = true },
-            swapchain_tex_w,
-            swapchain_tex_h,
-            ._1,
-        );
-
-        const depth_stencil_target_info = c.SDL_GPUDepthStencilTargetInfo{
-            .texture = self._depth_tex.toSdl(),
-            .clear_depth = 0, // can be ignored if loadop isnt clear
-            .load_op = c.SDL_GPU_LOADOP_CLEAR,
-            .store_op = c.SDL_GPU_STOREOP_STORE,
-            .stencil_load_op = c.SDL_GPU_LOADOP_DONT_CARE,
-            .stencil_store_op = c.SDL_GPU_STOREOP_DONT_CARE,
-            .clear_stencil = 0, // can be ignored if stnecil load op isnt clear
-            .mip_level = 0,
-            .layer = 0,
-            .cycle = true,
-        };
-
-        const render_pass = try sdlCheck(
-            @src(),
-            *c.SDL_GPURenderPass,
-            c.SDL_BeginGPURenderPass(
-                command_buffer,
-                &color_target_info,
-                1,
-                &depth_stencil_target_info,
-            ),
-            RendererError.FailedToBeginRenderPass,
-        );
-
-        const buffer_bindings = [_]c.SDL_GPUBufferBinding{
-            .{
-                .buffer = vertex_buffer.toSdl(),
-                .offset = 0,
-            },
-        };
-
-        c.SDL_BindGPUVertexBuffers(render_pass, 0, &buffer_bindings, buffer_bindings.len);
-
-        const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
-            .slot = 0,
-            .pitch = @sizeOf(Vertex),
-            .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
-        };
-
-        const vertex_attrib = c.SDL_GPUVertexAttribute{
-            .location = 0,
-            .buffer_slot = 0,
-            .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-            .offset = 0,
         };
 
         var vert_shader = try self._shaders.get("simple_vert");
@@ -307,12 +212,119 @@ pub const Renderer = struct {
             c.SDL_CreateGPUGraphicsPipeline(self._gpu_device, &gfx_pipeline_info),
             RendererError.FailedToCreateGpuGraphicsPipeline,
         );
+    }
+
+    pub fn deinit(self: *@This()) void {
+        c.SDL_ReleaseGPUGraphicsPipeline(self._gpu_device, self._graphics_pipeline);
+
+        self._depth_tex.deinit(self._gpu_device);
+
+        self._shaders.deinit(self._gpu_device);
+
+        c.SDL_DestroyGPUDevice(self._gpu_device);
+    }
+
+    pub fn render(self: *@This()) !void {
+        const command_buffer = try sdlCheck(
+            @src(),
+            *c.SDL_GPUCommandBuffer,
+            c.SDL_AcquireGPUCommandBuffer(self._gpu_device),
+            RendererError.FailedToAcquireGpuCommandBuffer,
+        );
+
+        const vertices = [_]Vertex{
+            .{ .pos = .{ -0.5, 0.0 } },
+            .{ .pos = .{ 0.5, 0.0 } },
+            .{ .pos = .{ 0, 0.5 } },
+        };
+
+        const buf_size = @sizeOf(@TypeOf(vertices));
+
+        var vertex_buffer = try buf.Buffer.create(self._gpu_device, .Vertex, buf_size);
+        defer vertex_buffer.deinit(self._gpu_device);
+
+        var transfer_buffer = try buf.transfer.Upload.create(self._gpu_device, buf_size);
+        defer transfer_buffer.deinit(self._gpu_device);
+
+        try transfer_buffer.upload(self._gpu_device, Vertex, &vertices);
+
+        const copy_pass = try sdlCheck(
+            @src(),
+            *c.SDL_GPUCopyPass,
+            c.SDL_BeginGPUCopyPass(command_buffer),
+            RendererError.FailedToBeginGpuCopyPass,
+        );
+
+        try vertex_buffer.upload(copy_pass, transfer_buffer, 0, .{
+            .offset = 0,
+            .size = buf_size,
+        });
+
+        c.SDL_EndGPUCopyPass(copy_pass);
+
+        var swapchain_tex: ?*c.SDL_GPUTexture = null;
+        try sdlCheckBool(
+            @src(),
+            c.SDL_WaitAndAcquireGPUSwapchainTexture(
+                command_buffer,
+                self._window.toSdl(),
+                &swapchain_tex,
+                &self._swapchain_tex_w,
+                &self._swapchain_tex_h,
+            ),
+            RendererError.FailedToAcquireSwapchainTexture,
+        );
+
+        const color_target_info = c.SDL_GPUColorTargetInfo{
+            .texture = swapchain_tex.?,
+            .mip_level = 0,
+            .layer_or_depth_plane = 0,
+            .clear_color = .{ .r = 0.5, .g = 0.2, .b = 0.7, .a = 1.0 },
+            .load_op = c.SDL_GPU_LOADOP_CLEAR,
+            .store_op = c.SDL_GPU_STOREOP_STORE,
+            .resolve_texture = null, // resolve fields can be ignored since a resolve store_op is not being used
+            .cycle = true,
+        };
+
+        const depth_stencil_target_info = c.SDL_GPUDepthStencilTargetInfo{
+            .texture = self._depth_tex.toSdl(),
+            .clear_depth = 0, // can be ignored if loadop isnt clear
+            .load_op = c.SDL_GPU_LOADOP_CLEAR,
+            .store_op = c.SDL_GPU_STOREOP_STORE,
+            .stencil_load_op = c.SDL_GPU_LOADOP_DONT_CARE,
+            .stencil_store_op = c.SDL_GPU_STOREOP_DONT_CARE,
+            .clear_stencil = 0, // can be ignored if stnecil load op isnt clear
+            .mip_level = 0,
+            .layer = 0,
+            .cycle = true,
+        };
+
+        const render_pass = try sdlCheck(
+            @src(),
+            *c.SDL_GPURenderPass,
+            c.SDL_BeginGPURenderPass(
+                command_buffer,
+                &color_target_info,
+                1,
+                &depth_stencil_target_info,
+            ),
+            RendererError.FailedToBeginRenderPass,
+        );
+
+        const buffer_bindings = [_]c.SDL_GPUBufferBinding{
+            .{
+                .buffer = vertex_buffer.toSdl(),
+                .offset = 0,
+            },
+        };
+
+        c.SDL_BindGPUVertexBuffers(render_pass, 0, &buffer_bindings, buffer_bindings.len);
 
         const viewport = c.SDL_GPUViewport{
             .x = 0,
             .y = 0,
-            .w = @floatFromInt(swapchain_tex_w),
-            .h = @floatFromInt(swapchain_tex_h),
+            .w = @floatFromInt(self._swapchain_tex_w),
+            .h = @floatFromInt(self._swapchain_tex_h),
             .min_depth = 0,
             .max_depth = 1,
         };
@@ -326,18 +338,6 @@ pub const Renderer = struct {
 
         try sdlCheckBool(@src(), c.SDL_SubmitGPUCommandBuffer(command_buffer), RendererError.FailedToSubmitGpuCommandBuffer);
     }
-
-    pub fn deinit(self: *@This()) void {
-        c.SDL_ReleaseGPUGraphicsPipeline(self._gpu_device, self._graphics_pipeline);
-
-        self._depth_tex.deinit(self._gpu_device);
-
-        self._shaders.deinit(self._gpu_device);
-
-        c.SDL_DestroyGPUDevice(self._gpu_device);
-    }
-
-    // pub fn render(self: *@This()) void {}
 
     fn loadShaders(self: *@This(), io: std.Io, allocator: std.mem.Allocator, spirv_bin_dir_path: []const u8) !void {
         self._shaders.clearRetainingCapacity();
