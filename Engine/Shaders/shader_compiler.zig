@@ -22,6 +22,7 @@ const ShaderFile = struct {
         const binary_name = try std.mem.join(allocator, "", &.{ self.name, ".spv" });
         const binary_output_path = try std.Io.Dir.path.join(allocator, &.{ compiled_shaders_path, binary_name });
 
+        // use -reflection-json to return descriptor counts
         const slangc_args = [_][]const u8{
             "slangc",
             shader_absolute_path,

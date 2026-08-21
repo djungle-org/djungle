@@ -42,10 +42,10 @@ const debug: bool = switch (@import("builtin").mode) {
     .ReleaseFast, .ReleaseSmall => false,
 };
 
-const Vec3 = @Vector(3, f32);
+const Vec2 = @Vector(2, f32);
 
 const Vertex = struct {
-    pos: Vec3,
+    pos: Vec2,
 };
 
 pub const Renderer = struct {
@@ -126,9 +126,9 @@ pub const Renderer = struct {
         );
 
         const vertices = [_]Vertex{
-            .{ .pos = .{ -0.5, 0.0, 0 } },
-            .{ .pos = .{ 0.5, 0.0, 0 } },
-            .{ .pos = .{ 0, 0.5, 0 } },
+            .{ .pos = .{ -0.5, 0.0 } },
+            .{ .pos = .{ 0.5, 0.0 } },
+            .{ .pos = .{ 0, 0.5 } },
         };
 
         const buf_size = @sizeOf(@TypeOf(vertices));
@@ -225,7 +225,6 @@ pub const Renderer = struct {
             ),
             RendererError.FailedToBeginRenderPass,
         );
-        defer c.SDL_EndGPURenderPass(render_pass);
 
         const buffer_bindings = [_]c.SDL_GPUBufferBinding{
             .{
@@ -245,7 +244,7 @@ pub const Renderer = struct {
         const vertex_attrib = c.SDL_GPUVertexAttribute{
             .location = 0,
             .buffer_slot = 0,
-            .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+            .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
             .offset = 0,
         };
 
@@ -310,6 +309,8 @@ pub const Renderer = struct {
             c.SDL_CreateGPUGraphicsPipeline(self._gpu_device, &gfx_pipeline_info),
             RendererError.FailedToCreateGpuGraphicsPipeline,
         );
+
+        c.SDL_EndGPURenderPass(render_pass);
 
         try sdlCheckBool(@src(), c.SDL_SubmitGPUCommandBuffer(command_buffer), RendererError.FailedToSubmitGpuCommandBuffer);
     }
