@@ -2,6 +2,8 @@ const std = @import("std");
 
 const eng = @import("Engine");
 
+const width = 800;
+const height = 800;
 const app_name = "djungle";
 
 pub fn main(init: std.process.Init) !void {
@@ -13,7 +15,7 @@ pub fn main(init: std.process.Init) !void {
     try array_list.append(gpa, 5);
     try array_list.append(gpa, 1);
 
-    var window = try eng.window.Window.init(800, 800, app_name);
+    var window = try eng.window.Window.init(width, height, app_name);
     defer window.deinit();
 
     var exe_dir_buf: [std.Io.Dir.max_path_bytes]u8 = undefined;

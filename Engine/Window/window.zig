@@ -57,6 +57,14 @@ pub const Window = struct {
         c.SDL_Quit();
     }
 
+    pub fn getWidth(self: @This()) u32 {
+        return self._width;
+    }
+
+    pub fn getHeight(self: @This()) u32 {
+        return self._height;
+    }
+
     pub fn pollEvents(_: @This()) bool {
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event)) {

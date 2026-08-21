@@ -8,6 +8,8 @@ const delque = @import("DeletionQueue");
 const win = @import("Window");
 const log = @import("Logging");
 
+const types = @import("types.zig");
+
 const reg = @import("shader_registry.zig");
 const Shader = reg.Shader;
 const ShaderKind = reg.ShaderKind;
@@ -32,6 +34,7 @@ pub const RendererError = error{
     FailedToBeginGpuCopyPass,
     FailedToSubmitGpuCommandBuffer,
     FailedToCreateGpuGraphicsPipeline,
+    FailedToBeginRenderPass,
 };
 
 const debug: bool = switch (@import("builtin").mode) {
@@ -48,7 +51,12 @@ const Vertex = struct {
 pub const Renderer = struct {
     _window: *win.Window,
 
+    _width: u32,
+    _height: u32,
+
     _gpu_device: *c.SDL_GPUDevice,
+
+    _depth_tex: tex.Texture,
 
     _graphics_pipeline: *c.SDL_GPUGraphicsPipeline,
 
@@ -56,6 +64,9 @@ pub const Renderer = struct {
 
     pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, window: *win.Window, gpu_driver: GpuDriver, spirv_bin_dir_path: []const u8) !void {
         self._window = window;
+
+        self._width = self._window.getWidth();
+        self._height = self._window.getHeight();
 
         self._shaders = try ShaderRegistry.init(gpa);
 
@@ -144,26 +155,99 @@ pub const Renderer = struct {
 
         c.SDL_EndGPUCopyPass(copy_pass);
 
-        const color_target_info = c.SDL_GPUColorTargetInfo{};
+        var color_tex = try tex.Texture.create(
+            self._gpu_device,
+            ._2d,
+            .R8G8B8A8_Srgb,
+            .{ .color_target = true },
+            self._width,
+            self._height,
+            ._1,
+        );
+        defer color_tex.deinit(self._gpu_device);
 
-        const depth_stencil_target_info = c.SDL_GPUDepthStencilTargetInfo{};
+        const color_target_info = c.SDL_GPUColorTargetInfo{
+            .texture = color_tex.toSdl(),
+            .mip_level = 0,
+            .layer_or_depth_plane = 0,
+            .clear_color = .{ .r = 0.5, .g = 0.2, .b = 0.7, .a = 1.0 },
+            .load_op = c.SDL_GPU_LOADOP_CLEAR,
+            .store_op = c.SDL_GPU_STOREOP_STORE,
+            .resolve_texture = null, // resolve fields can be ignored since a resolve store_op is not being used
+            .cycle = true,
+        };
 
-        const render_pass = c.SDL_BeginGPURenderPass(
-            command_buffer,
-            &color_target_info,
-            1,
-            &depth_stencil_target_info,
+        const color_target_description = c.SDL_GPUColorTargetDescription{
+            .format = color_tex.format.toSdl(),
+            .blend_state = .{
+                .enable_blend = true,
+                .src_color_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE,
+                .dst_color_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_DST_ALPHA,
+                .color_blend_op = c.SDL_GPU_BLENDOP_ADD,
+                .src_alpha_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE,
+                .dst_alpha_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE,
+                .alpha_blend_op = c.SDL_GPU_BLENDOP_ADD,
+                .enable_color_write_mask = false,
+            },
+        };
+
+        self._depth_tex = try tex.Texture.create(
+            self._gpu_device,
+            ._2d,
+            .D32_Float,
+            .{ .depth_stencil_target = true },
+            self._width,
+            self._height,
+            ._1,
+        );
+
+        const depth_stencil_target_info = c.SDL_GPUDepthStencilTargetInfo{
+            .texture = self._depth_tex.toSdl(),
+            .clear_depth = 0, // can be ignored if loadop isnt clear
+            .load_op = c.SDL_GPU_LOADOP_CLEAR,
+            .store_op = c.SDL_GPU_STOREOP_STORE,
+            .stencil_load_op = c.SDL_GPU_LOADOP_DONT_CARE,
+            .stencil_store_op = c.SDL_GPU_STOREOP_DONT_CARE,
+            .clear_stencil = 0, // can be ignored if stnecil load op isnt clear
+            .mip_level = 0,
+            .layer = 0,
+            .cycle = true,
+        };
+
+        const render_pass = try sdlCheck(
+            @src(),
+            *c.SDL_GPURenderPass,
+            c.SDL_BeginGPURenderPass(
+                command_buffer,
+                &color_target_info,
+                1,
+                &depth_stencil_target_info,
+            ),
+            RendererError.FailedToBeginRenderPass,
         );
         defer c.SDL_EndGPURenderPass(render_pass);
 
         const buffer_bindings = [_]c.SDL_GPUBufferBinding{
             .{
-                .buffer = vertex_buffer.sdlBuffer(),
+                .buffer = vertex_buffer.toSdl(),
                 .offset = 0,
             },
         };
 
         c.SDL_BindGPUVertexBuffers(render_pass, 0, &buffer_bindings, buffer_bindings.len);
+
+        const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
+            .slot = 0,
+            .pitch = @sizeOf(Vertex),
+            .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
+        };
+
+        const vertex_attrib = c.SDL_GPUVertexAttribute{
+            .location = 0,
+            .buffer_slot = 0,
+            .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+            .offset = 0,
+        };
 
         var vert_shader = try self._shaders.get("simple_vert");
         var frag_shader = try self._shaders.get("simple_frag");
@@ -173,13 +257,51 @@ pub const Renderer = struct {
             .fragment_shader = frag_shader.sdlShader(),
             .vertex_input_state = .{
                 .num_vertex_buffers = 1,
-                // finish this
+                .vertex_buffer_descriptions = &vertex_buf_description,
+                .num_vertex_attributes = 1,
+                .vertex_attributes = &vertex_attrib,
             },
             .primitive_type = c.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
-            .rasterizer_state = .{},
-            .multisample_state = .{},
-            .depth_stencil_state = .{},
-            .target_info = .{},
+            .rasterizer_state = .{
+                .fill_mode = c.SDL_GPU_FILLMODE_FILL,
+                .cull_mode = c.SDL_GPU_CULLMODE_NONE, // CHANGE LATER
+                .front_face = c.SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,
+                .enable_depth_bias = false,
+                .depth_bias_constant_factor = 0, // these dont need to be added since depth bias is off
+                .depth_bias_clamp = 0, // <--
+                .depth_bias_slope_factor = 0, // <--
+                .enable_depth_clip = true,
+            },
+            .multisample_state = .{
+                .sample_count = types.SampleCount.toSdl(._1),
+                .enable_alpha_to_coverage = false,
+            },
+            .depth_stencil_state = .{
+                .enable_depth_test = true,
+                .enable_depth_write = false,
+                .compare_op = c.SDL_GPU_COMPAREOP_LESS_OR_EQUAL,
+                .enable_stencil_test = false,
+                .back_stencil_state = .{ // all this can be ignored if enable stencil test is false
+                    .compare_op = c.SDL_GPU_COMPAREOP_ALWAYS,
+                    .depth_fail_op = c.SDL_GPU_STENCILOP_KEEP,
+                    .fail_op = c.SDL_GPU_STENCILOP_KEEP,
+                    .pass_op = c.SDL_GPU_STENCILOP_KEEP,
+                },
+                .front_stencil_state = .{
+                    .compare_op = c.SDL_GPU_COMPAREOP_ALWAYS,
+                    .depth_fail_op = c.SDL_GPU_STENCILOP_KEEP,
+                    .fail_op = c.SDL_GPU_STENCILOP_KEEP,
+                    .pass_op = c.SDL_GPU_STENCILOP_KEEP,
+                },
+                .compare_mask = 0,
+                .write_mask = 0,
+            },
+            .target_info = .{
+                .num_color_targets = 1,
+                .color_target_descriptions = &color_target_description,
+                .has_depth_stencil_target = true,
+                .depth_stencil_format = self._depth_tex.format.toSdl(),
+            },
         };
 
         self._graphics_pipeline = try sdlCheck(
@@ -193,6 +315,10 @@ pub const Renderer = struct {
     }
 
     pub fn deinit(self: *@This()) void {
+        c.SDL_ReleaseGPUGraphicsPipeline(self._gpu_device, self._graphics_pipeline);
+
+        self._depth_tex.deinit(self._gpu_device);
+
         self._shaders.deinit(self._gpu_device);
 
         c.SDL_DestroyGPUDevice(self._gpu_device);
@@ -213,11 +339,11 @@ pub const Renderer = struct {
         const ShaderBinary = struct {
             name: []const u8,
             path: []const u8,
-            entry: []const u8,
+            entry: [:0]const u8,
             kind: ShaderKind,
         };
 
-        const binaries_zon_buf_0 = try std.mem.Allocator.dupeSentinel(arena, u8, binaries_zon_buf, 0);
+        const binaries_zon_buf_0 = try arena.dupeSentinel(u8, binaries_zon_buf, 0);
         const binary_files = try std.zon.parse.fromSliceAlloc([]ShaderBinary, arena, binaries_zon_buf_0, null, .{});
 
         for (binary_files) |binary_file| {
