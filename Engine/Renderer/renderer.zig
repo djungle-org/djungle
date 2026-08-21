@@ -35,6 +35,7 @@ pub const RendererError = error{
     FailedToSubmitGpuCommandBuffer,
     FailedToCreateGpuGraphicsPipeline,
     FailedToBeginRenderPass,
+    FailedToAcquireSwapchainTexture,
 };
 
 const debug: bool = switch (@import("builtin").mode) {
@@ -50,23 +51,14 @@ const Vertex = struct {
 
 pub const Renderer = struct {
     _window: *win.Window,
-
-    _width: u32,
-    _height: u32,
-
+    _swapchain_format: c_uint,
     _gpu_device: *c.SDL_GPUDevice,
-
     _depth_tex: tex.Texture,
-
     _graphics_pipeline: *c.SDL_GPUGraphicsPipeline,
-
     _shaders: ShaderRegistry,
 
     pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, window: *win.Window, gpu_driver: GpuDriver, spirv_bin_dir_path: []const u8) !void {
         self._window = window;
-
-        self._width = self._window.getWidth();
-        self._height = self._window.getHeight();
 
         self._shaders = try ShaderRegistry.init(gpa);
 
@@ -111,10 +103,12 @@ pub const Renderer = struct {
             return RendererError.FailedToCreateGpuDevice;
         };
 
-        if (!c.SDL_ClaimWindowForGPUDevice(self._gpu_device, self._window._sdl_window)) {
+        if (!c.SDL_ClaimWindowForGPUDevice(self._gpu_device, self._window.toSdl())) {
             log.err(@src(), "{s}", .{c.SDL_GetError()});
             return RendererError.FailedToClaimWindowForGpu;
         }
+
+        self._swapchain_format = c.SDL_GetGPUSwapchainTextureFormat(self._gpu_device, self._window.toSdl());
 
         try self.loadShaders(io, gpa, spirv_bin_dir_path);
 
@@ -155,19 +149,23 @@ pub const Renderer = struct {
 
         c.SDL_EndGPUCopyPass(copy_pass);
 
-        var color_tex = try tex.Texture.create(
-            self._gpu_device,
-            ._2d,
-            .R8G8B8A8_Srgb,
-            .{ .color_target = true },
-            self._width,
-            self._height,
-            ._1,
+        var swapchain_tex_w: u32 = undefined;
+        var swapchain_tex_h: u32 = undefined;
+        var swapchain_tex: ?*c.SDL_GPUTexture = null;
+        try sdlCheckBool(
+            @src(),
+            c.SDL_WaitAndAcquireGPUSwapchainTexture(
+                command_buffer,
+                self._window.toSdl(),
+                &swapchain_tex,
+                &swapchain_tex_w,
+                &swapchain_tex_h,
+            ),
+            RendererError.FailedToAcquireSwapchainTexture,
         );
-        defer color_tex.deinit(self._gpu_device);
 
         const color_target_info = c.SDL_GPUColorTargetInfo{
-            .texture = color_tex.toSdl(),
+            .texture = swapchain_tex.?,
             .mip_level = 0,
             .layer_or_depth_plane = 0,
             .clear_color = .{ .r = 0.5, .g = 0.2, .b = 0.7, .a = 1.0 },
@@ -178,7 +176,7 @@ pub const Renderer = struct {
         };
 
         const color_target_description = c.SDL_GPUColorTargetDescription{
-            .format = color_tex.format.toSdl(),
+            .format = self._swapchain_format,
             .blend_state = .{
                 .enable_blend = true,
                 .src_color_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE,
@@ -196,8 +194,8 @@ pub const Renderer = struct {
             ._2d,
             .D32_Float,
             .{ .depth_stencil_target = true },
-            self._width,
-            self._height,
+            swapchain_tex_w,
+            swapchain_tex_h,
             ._1,
         );
 
@@ -310,6 +308,20 @@ pub const Renderer = struct {
             RendererError.FailedToCreateGpuGraphicsPipeline,
         );
 
+        const viewport = c.SDL_GPUViewport{
+            .x = 0,
+            .y = 0,
+            .w = @floatFromInt(swapchain_tex_w),
+            .h = @floatFromInt(swapchain_tex_h),
+            .min_depth = 0,
+            .max_depth = 1,
+        };
+        c.SDL_SetGPUViewport(render_pass, &viewport);
+
+        c.SDL_BindGPUGraphicsPipeline(render_pass, self._graphics_pipeline);
+
+        c.SDL_DrawGPUPrimitives(render_pass, 3, 1, 0, 0);
+
         c.SDL_EndGPURenderPass(render_pass);
 
         try sdlCheckBool(@src(), c.SDL_SubmitGPUCommandBuffer(command_buffer), RendererError.FailedToSubmitGpuCommandBuffer);
@@ -324,6 +336,8 @@ pub const Renderer = struct {
 
         c.SDL_DestroyGPUDevice(self._gpu_device);
     }
+
+    // pub fn render(self: *@This()) void {}
 
     fn loadShaders(self: *@This(), io: std.Io, allocator: std.mem.Allocator, spirv_bin_dir_path: []const u8) !void {
         self._shaders.clearRetainingCapacity();

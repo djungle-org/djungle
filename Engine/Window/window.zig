@@ -65,6 +65,10 @@ pub const Window = struct {
         return self._height;
     }
 
+    pub fn toSdl(self: *@This()) *c.SDL_Window {
+        return self._sdl_window;
+    }
+
     pub fn pollEvents(_: @This()) bool {
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event)) {
@@ -74,23 +78,5 @@ pub const Window = struct {
         }
 
         return true;
-    }
-
-    /// TEMPORARY
-    pub fn clear(self: *@This()) WindowError!void {
-        if (!c.SDL_SetRenderDrawColor(self._renderer, 100, 10, 50, 255)) {
-            log.err(@src(), "{s}", .{c.SDL_GetError()});
-            return WindowError.SdlRendererSetDrawColor;
-        }
-
-        if (!c.SDL_RenderClear(self._renderer)) {
-            log.err(@src(), "{s}", .{c.SDL_GetError()});
-            return WindowError.SdlRendererSetDrawColor;
-        }
-
-        if (!c.SDL_RenderPresent(self._renderer)) {
-            log.err(@src(), "{s}", .{c.SDL_GetError()});
-            return WindowError.SdlRendererSetDrawColor;
-        }
     }
 };
