@@ -74,7 +74,7 @@ pub const Renderer = struct {
         };
 
         var vulkan_options = std.mem.zeroes(c.SDL_GPUVulkanOptions);
-        const vulkan_api_version: u32 = (0 << 29) | (1 << 22) | (3 << 12) | 0; // vulkan 1.4.0
+        const vulkan_api_version: u32 = (0 << 29) | (1 << 22) | (3 << 12) | 0; // vulkan 1.3.0
         vulkan_options.vulkan_api_version = vulkan_api_version;
 
         const props = c.SDL_CreateProperties();
