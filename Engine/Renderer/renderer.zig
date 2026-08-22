@@ -56,6 +56,8 @@ pub const Renderer = struct {
     _swapchain_tex_h: u32,
     _gpu_device: *c.SDL_GPUDevice,
     _depth_tex: tex.Texture,
+    _vertex_buffer: buf.Buffer,
+    _vertex_buf_binding: c.SDL_GPUBufferBinding,
     _graphics_pipeline: *c.SDL_GPUGraphicsPipeline,
     _shaders: ShaderRegistry,
 
@@ -114,15 +116,48 @@ pub const Renderer = struct {
 
         try self.loadShaders(io, gpa, spirv_bin_dir_path);
 
-        self._depth_tex = try tex.Texture.create(
-            self._gpu_device,
-            ._2d,
-            .D32_Float,
-            .{ .depth_stencil_target = true },
-            window._width,
-            window._height,
-            ._1,
+        const command_buffer = try sdlCheck(
+            @src(),
+            *c.SDL_GPUCommandBuffer,
+            c.SDL_AcquireGPUCommandBuffer(self._gpu_device),
+            RendererError.FailedToAcquireGpuCommandBuffer,
         );
+
+        const vertices = [_]Vertex{
+            .{ .pos = .{ -0.5, 0.0 } },
+            .{ .pos = .{ 0.5, 0.0 } },
+            .{ .pos = .{ 0, 0.5 } },
+        };
+
+        const buf_size = @sizeOf(@TypeOf(vertices));
+
+        self._vertex_buffer = try buf.Buffer.create(self._gpu_device, .Vertex, buf_size);
+
+        var transfer_buffer = try buf.transfer.Upload.create(self._gpu_device, buf_size);
+        defer transfer_buffer.deinit(self._gpu_device);
+
+        try transfer_buffer.upload(self._gpu_device, Vertex, &vertices);
+
+        const copy_pass = try sdlCheck(
+            @src(),
+            *c.SDL_GPUCopyPass,
+            c.SDL_BeginGPUCopyPass(command_buffer),
+            RendererError.FailedToBeginGpuCopyPass,
+        );
+
+        try self._vertex_buffer.upload(copy_pass, transfer_buffer, 0, .{
+            .offset = 0,
+            .size = buf_size,
+        });
+
+        c.SDL_EndGPUCopyPass(copy_pass);
+
+        try sdlCheckBool(@src(), c.SDL_SubmitGPUCommandBuffer(command_buffer), RendererError.FailedToSubmitGpuCommandBuffer);
+
+        self._vertex_buf_binding = c.SDL_GPUBufferBinding{
+            .buffer = self._vertex_buffer.toSdl(),
+            .offset = 0,
+        };
 
         const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
             .slot = 0,
@@ -136,6 +171,16 @@ pub const Renderer = struct {
             .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
             .offset = 0,
         };
+
+        self._depth_tex = try tex.Texture.create(
+            self._gpu_device,
+            ._2d,
+            .D32_Float,
+            .{ .depth_stencil_target = true },
+            window._width,
+            window._height,
+            ._1,
+        );
 
         const color_target_description = c.SDL_GPUColorTargetDescription{
             .format = self._swapchain_format,
@@ -219,6 +264,8 @@ pub const Renderer = struct {
 
         self._depth_tex.deinit(self._gpu_device);
 
+        self._vertex_buffer.deinit(self._gpu_device);
+
         self._shaders.deinit(self._gpu_device);
 
         c.SDL_DestroyGPUDevice(self._gpu_device);
@@ -231,36 +278,6 @@ pub const Renderer = struct {
             c.SDL_AcquireGPUCommandBuffer(self._gpu_device),
             RendererError.FailedToAcquireGpuCommandBuffer,
         );
-
-        const vertices = [_]Vertex{
-            .{ .pos = .{ -0.5, 0.0 } },
-            .{ .pos = .{ 0.5, 0.0 } },
-            .{ .pos = .{ 0, 0.5 } },
-        };
-
-        const buf_size = @sizeOf(@TypeOf(vertices));
-
-        var vertex_buffer = try buf.Buffer.create(self._gpu_device, .Vertex, buf_size);
-        defer vertex_buffer.deinit(self._gpu_device);
-
-        var transfer_buffer = try buf.transfer.Upload.create(self._gpu_device, buf_size);
-        defer transfer_buffer.deinit(self._gpu_device);
-
-        try transfer_buffer.upload(self._gpu_device, Vertex, &vertices);
-
-        const copy_pass = try sdlCheck(
-            @src(),
-            *c.SDL_GPUCopyPass,
-            c.SDL_BeginGPUCopyPass(command_buffer),
-            RendererError.FailedToBeginGpuCopyPass,
-        );
-
-        try vertex_buffer.upload(copy_pass, transfer_buffer, 0, .{
-            .offset = 0,
-            .size = buf_size,
-        });
-
-        c.SDL_EndGPUCopyPass(copy_pass);
 
         var swapchain_tex: ?*c.SDL_GPUTexture = null;
         try sdlCheckBool(
@@ -311,14 +328,7 @@ pub const Renderer = struct {
             RendererError.FailedToBeginRenderPass,
         );
 
-        const buffer_bindings = [_]c.SDL_GPUBufferBinding{
-            .{
-                .buffer = vertex_buffer.toSdl(),
-                .offset = 0,
-            },
-        };
-
-        c.SDL_BindGPUVertexBuffers(render_pass, 0, &buffer_bindings, buffer_bindings.len);
+        c.SDL_BindGPUVertexBuffers(render_pass, 0, &self._vertex_buf_binding, 1);
 
         const viewport = c.SDL_GPUViewport{
             .x = 0,

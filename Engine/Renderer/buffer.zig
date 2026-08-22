@@ -100,14 +100,15 @@ pub const transfer = struct {
         }
 
         pub fn upload(self: *@This(), gpu_device: *c.SDL_GPUDevice, comptime T: type, buffer: []const T) !void {
-            var mem = try sdlCheck(
+            const mem = try sdlCheck(
                 @src(),
                 *anyopaque,
                 c.SDL_MapGPUTransferBuffer(gpu_device, self._sdl_transfer_buffer, true),
                 BufferError.FailedToMapTransferBuffer,
             );
 
-            mem = @ptrCast(@constCast(buffer));
+            const dest: [*]T = @ptrCast(@alignCast(mem));
+            @memcpy(dest[0..buffer.len], buffer);
 
             c.SDL_UnmapGPUTransferBuffer(gpu_device, self._sdl_transfer_buffer);
         }

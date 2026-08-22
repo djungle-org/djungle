@@ -9,3 +9,5 @@ flake.lock
 .envrc
 
 *.o
+
+renderdoc_settings.cap
