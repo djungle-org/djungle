@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) !void {
     b.installArtifact(shader_compiler);
 
     const run_shader_compiler = b.addRunArtifact(shader_compiler);
-
+    run_shader_compiler.stdio = .inherit;
     run_shader_compiler.addDirectoryArg(b.path("Shaders/Source"));
     const compiled_shaders_dir = run_shader_compiler.addOutputDirectoryArg("compiled_shaders_dir");
 
