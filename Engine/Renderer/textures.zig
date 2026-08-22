@@ -1,10 +1,10 @@
 const std = @import("std");
-
 const c = @import("C").c;
-const sdlCheck = @import("C").sdlCheck;
-
 const types = @import("types.zig");
 const log = @import("Logging");
+
+const sdlCheck = @import("C").sdlCheck;
+const GpuDevice = @import("gpu_device.zig").GpuDevice;
 
 pub const TextureError = error{
     FailedToCreateGpuTexture,
@@ -92,7 +92,7 @@ pub const Texture = struct {
 
     /// sampler + graphics_storage_read or compute_storage_read is invalid and will return an error
     pub fn create(
-        gpu_device: *c.SDL_GPUDevice,
+        gpu_device: *GpuDevice,
         tex_type: TextureType,
         format: TextureFormat,
         usage: TextureUsage,
@@ -124,7 +124,7 @@ pub const Texture = struct {
             ._sdl_texture = try sdlCheck(
                 @src(),
                 *c.SDL_GPUTexture,
-                c.SDL_CreateGPUTexture(gpu_device, &gpu_tex_info),
+                c.SDL_CreateGPUTexture(gpu_device.toSdl(), &gpu_tex_info),
                 TextureError.FailedToCreateGpuTexture,
             ),
             .tex_type = tex_type,
@@ -133,12 +133,12 @@ pub const Texture = struct {
         };
     }
 
-    pub fn deinit(self: *@This(), gpu_device: *c.SDL_GPUDevice) void {
-        c.SDL_ReleaseGPUTexture(gpu_device, self._sdl_texture);
+    pub fn deinit(self: *@This(), gpu_device: *GpuDevice) void {
+        c.SDL_ReleaseGPUTexture(gpu_device.toSdl(), self._sdl_texture);
     }
 
     /// needs to be implemented
-    pub fn upload(self: *@This(), gpu_device: *c.SDL_GPUDevice) void {
+    pub fn upload(self: *@This(), gpu_device: *GpuDevice) void {
         _ = self;
         _ = gpu_device;
     }

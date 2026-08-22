@@ -18,6 +18,8 @@ const ShaderRegistry = reg.ShaderRegistry;
 
 const buf = @import("buffer.zig");
 const tex = @import("textures.zig");
+const dev = @import("gpu_device.zig");
+const cmd = @import("command_buffer.zig");
 
 pub const RendererError = error{
     FailedToCreateGpuDevice,
@@ -44,29 +46,24 @@ pub const Renderer = struct {
     _swapchain_format: tex.TextureFormat,
     _swapchain_tex_w: u32,
     _swapchain_tex_h: u32,
-    _gpu_device: types.GpuDevice,
+    _gpu_device: dev.GpuDevice,
     _depth_tex: tex.Texture,
     _vertex_buffer: buf.Buffer,
     _vertex_buf_binding: c.SDL_GPUBufferBinding,
     _graphics_pipeline: *c.SDL_GPUGraphicsPipeline,
     _shaders: ShaderRegistry,
 
-    pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, window: *win.Window, gpu_driver: types.GpuDriver, debug: bool, spirv_bin_dir_path: []const u8) !void {
+    pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, window: *win.Window, gpu_driver: dev.GpuDriver, debug: bool, spirv_bin_dir_path: []const u8) !void {
         self._window = window;
 
-        self._gpu_device = try types.GpuDevice.init(gpu_driver, debug, self._window);
+        self._gpu_device = try dev.GpuDevice.init(gpu_driver, debug, self._window);
 
         self._swapchain_format = try self._gpu_device.getSwapchainFormat(self._window);
 
         self._shaders = try ShaderRegistry.init(gpa);
         try self.loadShaders(io, gpa, spirv_bin_dir_path);
 
-        const command_buffer = try sdlCheck(
-            @src(),
-            *c.SDL_GPUCommandBuffer,
-            c.SDL_AcquireGPUCommandBuffer(self._gpu_device.toSdl()),
-            RendererError.FailedToAcquireGpuCommandBuffer,
-        );
+        var command_buffer = try cmd.CommandBuffer.acquire(&self._gpu_device);
 
         const vertices = [_]Vertex{
             .{ .pos = .{ -0.5, -0.5 }, .col = .{ 1.0, 0.0, 0.0 } },
@@ -76,19 +73,14 @@ pub const Renderer = struct {
 
         const buf_size = @sizeOf(@TypeOf(vertices));
 
-        self._vertex_buffer = try buf.Buffer.create(self._gpu_device.toSdl(), .Vertex, buf_size);
+        self._vertex_buffer = try buf.Buffer.create(&self._gpu_device, .Vertex, buf_size);
 
-        var transfer_buffer = try buf.transfer.Upload.create(self._gpu_device.toSdl(), buf_size);
-        defer transfer_buffer.deinit(self._gpu_device.toSdl());
+        var transfer_buffer = try buf.transfer.Upload.create(&self._gpu_device, buf_size);
+        defer transfer_buffer.deinit(&self._gpu_device);
 
-        try transfer_buffer.upload(self._gpu_device.toSdl(), Vertex, &vertices);
+        try transfer_buffer.upload(&self._gpu_device, Vertex, &vertices);
 
-        const copy_pass = try sdlCheck(
-            @src(),
-            *c.SDL_GPUCopyPass,
-            c.SDL_BeginGPUCopyPass(command_buffer),
-            RendererError.FailedToBeginGpuCopyPass,
-        );
+        const copy_pass = try command_buffer.beginCopyPass();
 
         try self._vertex_buffer.upload(copy_pass, transfer_buffer, 0, .{
             .offset = 0,
@@ -97,7 +89,7 @@ pub const Renderer = struct {
 
         c.SDL_EndGPUCopyPass(copy_pass);
 
-        try sdlCheckBool(@src(), c.SDL_SubmitGPUCommandBuffer(command_buffer), RendererError.FailedToSubmitGpuCommandBuffer);
+        try command_buffer.submit();
 
         self._vertex_buf_binding = c.SDL_GPUBufferBinding{
             .buffer = self._vertex_buffer.toSdl(),
@@ -126,7 +118,7 @@ pub const Renderer = struct {
         };
 
         self._depth_tex = try tex.Texture.create(
-            self._gpu_device.toSdl(),
+            &self._gpu_device,
             ._2d,
             .D32_Float,
             .{ .depth_stencil_target = true },
@@ -153,8 +145,8 @@ pub const Renderer = struct {
         var frag_shader = try self._shaders.get("simple_frag");
 
         const gfx_pipeline_info = c.SDL_GPUGraphicsPipelineCreateInfo{
-            .vertex_shader = vert_shader.sdlShader(),
-            .fragment_shader = frag_shader.sdlShader(),
+            .vertex_shader = vert_shader.toSdl(),
+            .fragment_shader = frag_shader.toSdl(),
             .vertex_input_state = .{
                 .num_vertex_buffers = 1,
                 .vertex_buffer_descriptions = &vertex_buf_description,
@@ -215,11 +207,11 @@ pub const Renderer = struct {
     pub fn deinit(self: *@This()) void {
         c.SDL_ReleaseGPUGraphicsPipeline(self._gpu_device.toSdl(), self._graphics_pipeline);
 
-        self._depth_tex.deinit(self._gpu_device.toSdl());
+        self._depth_tex.deinit(&self._gpu_device);
 
-        self._vertex_buffer.deinit(self._gpu_device.toSdl());
+        self._vertex_buffer.deinit(&self._gpu_device);
 
-        self._shaders.deinit(self._gpu_device.toSdl());
+        self._shaders.deinit(&self._gpu_device);
 
         self._gpu_device.deinit();
     }
@@ -328,7 +320,7 @@ pub const Renderer = struct {
             const binary_buf = try spirv_bin_dir.readFileAlloc(io, binary_file.path, arena, .unlimited);
 
             const shader = try Shader.create(
-                self._gpu_device.toSdl(),
+                &self._gpu_device,
                 binary_buf.len * @sizeOf(u8),
                 binary_buf,
                 binary_file.entry,

@@ -1,7 +1,8 @@
 const std = @import("std");
-
 const c = @import("C").c;
 const log = @import("Logging");
+
+const GpuDevice = @import("gpu_device.zig").GpuDevice;
 
 pub const ShaderError = error{
     FailedToCreateGpuShader,
@@ -16,7 +17,7 @@ pub const Shader = struct {
     _sdl_gpu_shader: *c.SDL_GPUShader,
     _kind: ShaderKind,
 
-    pub fn create(gpu_device: *c.SDL_GPUDevice, code_size: usize, code: []const u8, entrypoint_name: []const u8, shader_kind: ShaderKind) !@This() {
+    pub fn create(gpu_device: *GpuDevice, code_size: usize, code: []const u8, entrypoint_name: []const u8, shader_kind: ShaderKind) !@This() {
         const shader_info = c.SDL_GPUShaderCreateInfo{
             .code_size = code_size,
             .code = @ptrCast(code),
@@ -33,7 +34,7 @@ pub const Shader = struct {
         };
 
         return .{
-            ._sdl_gpu_shader = c.SDL_CreateGPUShader(gpu_device, &shader_info) orelse {
+            ._sdl_gpu_shader = c.SDL_CreateGPUShader(gpu_device.toSdl(), &shader_info) orelse {
                 log.err(@src(), "{s}", .{c.SDL_GetError()});
                 return ShaderError.FailedToCreateGpuShader;
             },
@@ -41,11 +42,11 @@ pub const Shader = struct {
         };
     }
 
-    pub fn deinit(self: *@This(), gpu_device: *c.SDL_GPUDevice) void {
-        c.SDL_ReleaseGPUShader(gpu_device, self._sdl_gpu_shader);
+    pub fn deinit(self: *@This(), gpu_device: *GpuDevice) void {
+        c.SDL_ReleaseGPUShader(gpu_device.toSdl(), self._sdl_gpu_shader);
     }
 
-    pub fn sdlShader(self: *@This()) *c.SDL_GPUShader {
+    pub fn toSdl(self: *@This()) *c.SDL_GPUShader {
         return self._sdl_gpu_shader;
     }
 };
@@ -63,7 +64,7 @@ pub const ShaderRegistry = struct {
         };
     }
 
-    pub fn deinit(self: *@This(), gpu_device: *c.SDL_GPUDevice) void {
+    pub fn deinit(self: *@This(), gpu_device: *GpuDevice) void {
         var iter = self._shader_map.iterator();
 
         while (iter.next()) |entry| {
