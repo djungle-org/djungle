@@ -1,14 +1,13 @@
 const std = @import("std");
-
 const c = @import("C").c;
-
+const sdlCheck = @import("C").sdlCheck;
+const sdlCheckBool = @import("C").sdlCheckBool;
 const log = @import("Logging");
 
 pub const WindowError = error{
     SdlInitFailed,
     SdlWindowCreationFailed,
     SdlSetHintFailed,
-
     SdlCreateRendererFailed,
     SdlRendererSetDrawColor,
     SdlRendererClear,
@@ -20,39 +19,27 @@ pub const Window = struct {
     _height: u32,
 
     _sdl_window: *c.SDL_Window,
-    _renderer: *c.SDL_Renderer,
 
-    pub fn init(width: u32, height: u32, comptime name: [:0]const u8) WindowError!@This() {
-        if (!c.SDL_Init(c.SDL_INIT_VIDEO)) {
-            log.err(@src(), "{s}", .{c.SDL_GetError()});
-            return WindowError.SdlInitFailed;
-        }
+    pub fn init(width: u32, height: u32, comptime name: [:0]const u8) !@This() {
+        try sdlCheckBool(@src(), c.SDL_Init(c.SDL_INIT_VIDEO), WindowError.SdlInitFailed);
 
-        if (!c.SDL_SetHint(c.SDL_HINT_APP_ID, name)) {
-            log.err(@src(), "{s}", .{c.SDL_GetError()});
-            return WindowError.SdlSetHintFailed;
-        }
+        try sdlCheckBool(@src(), c.SDL_SetHint(c.SDL_HINT_APP_ID, name), WindowError.SdlSetHintFailed);
 
-        const sdl_window = c.SDL_CreateWindow(name, @intCast(width), @intCast(height), c.SDL_WINDOW_RESIZABLE) orelse {
-            log.err(@src(), "{s}", .{c.SDL_GetError()});
-            return WindowError.SdlWindowCreationFailed;
-        };
-
-        const renderer = c.SDL_CreateRenderer(sdl_window, null) orelse {
-            log.err(@src(), "{s}", .{c.SDL_GetError()});
-            return WindowError.SdlCreateRendererFailed;
-        };
+        const sdl_window = try sdlCheck(
+            @src(),
+            *c.SDL_Window,
+            c.SDL_CreateWindow(name, @intCast(width), @intCast(height), c.SDL_WINDOW_RESIZABLE),
+            WindowError.SdlWindowCreationFailed,
+        );
 
         return Window{
             ._width = width,
             ._height = height,
             ._sdl_window = sdl_window,
-            ._renderer = renderer,
         };
     }
 
     pub fn deinit(self: *@This()) void {
-        c.SDL_DestroyRenderer(self._renderer);
         c.SDL_DestroyWindow(self._sdl_window);
         c.SDL_Quit();
     }

@@ -1,5 +1,4 @@
 const std = @import("std");
-
 const eng = @import("Engine");
 
 const width = 800;
@@ -8,12 +7,6 @@ const app_name = "djungle";
 
 pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
-
-    var array_list = std.ArrayList(u32).empty;
-    defer array_list.deinit(gpa);
-
-    try array_list.append(gpa, 5);
-    try array_list.append(gpa, 1);
 
     var window = try eng.window.Window.init(width, height, app_name);
     defer window.deinit();
