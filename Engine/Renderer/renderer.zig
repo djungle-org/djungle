@@ -45,9 +45,11 @@ const debug: bool = switch (@import("builtin").mode) {
 };
 
 const Vec2 = @Vector(2, f32);
+const Vec3 = @Vector(3, f32);
 
 const Vertex = struct {
     pos: Vec2,
+    col: Vec3,
 };
 
 pub const Renderer = struct {
@@ -129,9 +131,9 @@ pub const Renderer = struct {
         );
 
         const vertices = [_]Vertex{
-            .{ .pos = .{ -0.5, 0.0 } },
-            .{ .pos = .{ 0.5, 0.0 } },
-            .{ .pos = .{ 0, 0.5 } },
+            .{ .pos = .{ -0.5, 0.0 }, .col = .{ 1.0, 0.0, 0.0 } },
+            .{ .pos = .{ 0.5, 0.0 }, .col = .{ 0.0, 1.0, 0.0 } },
+            .{ .pos = .{ 0, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
         };
 
         const buf_size = @sizeOf(@TypeOf(vertices));
@@ -170,11 +172,19 @@ pub const Renderer = struct {
             .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
         };
 
-        const vertex_attrib = c.SDL_GPUVertexAttribute{
-            .location = 0,
-            .buffer_slot = 0,
-            .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-            .offset = 0,
+        const vertex_attribs = [_]c.SDL_GPUVertexAttribute{
+            .{ // pos
+                .location = 0,
+                .buffer_slot = 0,
+                .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+                .offset = 0,
+            },
+            .{ // col
+                .location = 1,
+                .buffer_slot = 0,
+                .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+                .offset = @sizeOf(Vec2),
+            },
         };
 
         self._depth_tex = try tex.Texture.create(
@@ -210,8 +220,8 @@ pub const Renderer = struct {
             .vertex_input_state = .{
                 .num_vertex_buffers = 1,
                 .vertex_buffer_descriptions = &vertex_buf_description,
-                .num_vertex_attributes = 1,
-                .vertex_attributes = &vertex_attrib,
+                .num_vertex_attributes = vertex_attribs.len,
+                .vertex_attributes = &vertex_attribs,
             },
             .primitive_type = c.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
             .rasterizer_state = .{
