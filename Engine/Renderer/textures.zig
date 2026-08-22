@@ -4,10 +4,12 @@ const c = @import("C").c;
 const sdlCheck = @import("C").sdlCheck;
 
 const types = @import("types.zig");
+const log = @import("Logging");
 
 pub const TextureError = error{
     FailedToCreateGpuTexture,
     InvalidTextureUsageCombination,
+    UnknownTextureFormat,
 };
 
 pub const TextureType = enum {
@@ -30,14 +32,29 @@ pub const TextureType = enum {
 
 pub const TextureFormat = enum {
     R8G8B8A8_Srgb,
+    B8G8R8A8_Unorm,
     D24_Unorm,
     D32_Float,
 
     pub fn toSdl(self: @This()) c_uint {
         return switch (self) {
             .R8G8B8A8_Srgb => c.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB,
+            .B8G8R8A8_Unorm => c.SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
             .D24_Unorm => c.SDL_GPU_TEXTUREFORMAT_D24_UNORM,
             .D32_Float => c.SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+        };
+    }
+
+    pub fn fromSdl(sdl_format: c_uint) !TextureFormat {
+        return switch (sdl_format) {
+            c.SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM => .B8G8R8A8_Unorm,
+            c.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB => .R8G8B8A8_Srgb,
+            c.SDL_GPU_TEXTUREFORMAT_D24_UNORM => .D24_Unorm,
+            c.SDL_GPU_TEXTUREFORMAT_D32_FLOAT => .D32_Float,
+            else => {
+                log.err(@src(), "format {}", .{sdl_format});
+                return TextureError.UnknownTextureFormat;
+            },
         };
     }
 };

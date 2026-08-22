@@ -41,7 +41,7 @@ const Vertex = struct {
 
 pub const Renderer = struct {
     _window: *win.Window,
-    _swapchain_format: c_uint,
+    _swapchain_format: tex.TextureFormat,
     _swapchain_tex_w: u32,
     _swapchain_tex_h: u32,
     _gpu_device: types.GpuDevice,
@@ -56,7 +56,7 @@ pub const Renderer = struct {
 
         self._gpu_device = try types.GpuDevice.init(gpu_driver, debug, self._window);
 
-        self._swapchain_format = self._gpu_device.getSwapchainFormat(self._window);
+        self._swapchain_format = try self._gpu_device.getSwapchainFormat(self._window);
 
         self._shaders = try ShaderRegistry.init(gpa);
         try self.loadShaders(io, gpa, spirv_bin_dir_path);
@@ -136,7 +136,7 @@ pub const Renderer = struct {
         );
 
         const color_target_description = c.SDL_GPUColorTargetDescription{
-            .format = self._swapchain_format,
+            .format = self._swapchain_format.toSdl(),
             .blend_state = .{
                 .enable_blend = true,
                 .src_color_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE,

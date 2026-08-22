@@ -4,6 +4,7 @@ const sdlCheck = @import("C").sdlCheck;
 const sdlCheckBool = @import("C").sdlCheckBool;
 const vk = @import("Vulkan");
 const win = @import("Window");
+const TextureFormat = @import("textures.zig").TextureFormat;
 
 /// Auto to auto choose driver, Vulkan for Linux, Direct3D12 for Windows, Metal for MacOS
 pub const GpuDriver = enum {
@@ -84,8 +85,8 @@ pub const GpuDevice = struct {
         c.SDL_DestroyGPUDevice(self._sdl_gpu_device);
     }
 
-    pub fn getSwapchainFormat(self: *@This(), window: *win.Window) c_uint {
-        return c.SDL_GetGPUSwapchainTextureFormat(self.toSdl(), window.toSdl());
+    pub fn getSwapchainFormat(self: *@This(), window: *win.Window) !TextureFormat {
+        return try TextureFormat.fromSdl(c.SDL_GetGPUSwapchainTextureFormat(self.toSdl(), window.toSdl()));
     }
 
     pub fn toSdl(self: *@This()) *c.SDL_GPUDevice {
