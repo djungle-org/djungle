@@ -5,6 +5,11 @@ const width = 800;
 const height = 800;
 const app_name = "djungle";
 
+const debug: bool = switch (@import("builtin").mode) {
+    .Debug, .ReleaseSafe => true,
+    .ReleaseFast, .ReleaseSmall => false,
+};
+
 pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
 
@@ -19,7 +24,7 @@ pub fn main(init: std.process.Init) !void {
     defer gpa.free(spirv_bin_dir_path);
 
     var renderer: eng.renderer.Renderer = undefined;
-    try renderer.init(gpa, init.io, &window, .Auto, spirv_bin_dir_path);
+    try renderer.init(gpa, init.io, &window, .Auto, debug, spirv_bin_dir_path);
     defer renderer.deinit();
 
     var running = true;

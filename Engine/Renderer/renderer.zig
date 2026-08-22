@@ -19,14 +19,6 @@ const ShaderRegistry = reg.ShaderRegistry;
 const buf = @import("buffer.zig");
 const tex = @import("textures.zig");
 
-/// Auto to auto choose driver, Vulkan for Linux, Direct3D12 for Windows, Metal for MacOS
-pub const GpuDriver = enum {
-    Auto,
-    Vulkan,
-    Direct3D12,
-    Metal,
-};
-
 pub const RendererError = error{
     FailedToCreateGpuDevice,
     FailedToClaimWindowForGpu,
@@ -37,11 +29,6 @@ pub const RendererError = error{
     FailedToCreateGpuGraphicsPipeline,
     FailedToBeginRenderPass,
     FailedToAcquireSwapchainTexture,
-};
-
-const debug: bool = switch (@import("builtin").mode) {
-    .Debug, .ReleaseSafe => true,
-    .ReleaseFast, .ReleaseSmall => false,
 };
 
 const Vec2 = @Vector(2, f32);
@@ -57,93 +44,44 @@ pub const Renderer = struct {
     _swapchain_format: c_uint,
     _swapchain_tex_w: u32,
     _swapchain_tex_h: u32,
-    _gpu_device: *c.SDL_GPUDevice,
+    _gpu_device: types.GpuDevice,
     _depth_tex: tex.Texture,
     _vertex_buffer: buf.Buffer,
     _vertex_buf_binding: c.SDL_GPUBufferBinding,
     _graphics_pipeline: *c.SDL_GPUGraphicsPipeline,
     _shaders: ShaderRegistry,
 
-    pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, window: *win.Window, gpu_driver: GpuDriver, spirv_bin_dir_path: []const u8) !void {
+    pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, window: *win.Window, gpu_driver: types.GpuDriver, debug: bool, spirv_bin_dir_path: []const u8) !void {
         self._window = window;
 
+        self._gpu_device = try types.GpuDevice.init(gpu_driver, debug, self._window);
+
+        self._swapchain_format = self._gpu_device.getSwapchainFormat(self._window);
+
         self._shaders = try ShaderRegistry.init(gpa);
-
-        const gpu_driver_name: ?[]const u8 = switch (gpu_driver) {
-            .Auto => null,
-            .Vulkan => "vulkan",
-            .Direct3D12 => "direct3d12",
-            .Metal => "metal",
-        };
-
-        var draw_params_features = vk.PhysicalDeviceShaderDrawParametersFeatures{
-            .shader_draw_parameters = vk.Bool32.true,
-        };
-
-        var vulkan_options = std.mem.zeroes(c.SDL_GPUVulkanOptions);
-        vulkan_options.vulkan_api_version = vk.API_VERSION_1_3.toU32();
-        vulkan_options.feature_list = &draw_params_features;
-
-        const props = c.SDL_CreateProperties();
-        defer c.SDL_DestroyProperties(props);
-
-        try sdlCheckBool(
-            @src(),
-            c.SDL_SetPointerProperty(props, c.SDL_PROP_GPU_DEVICE_CREATE_VULKAN_OPTIONS_POINTER, &vulkan_options),
-            error.FailedToSetSdlPointerProperty,
-        );
-        try sdlCheckBool(
-            @src(),
-            c.SDL_SetBooleanProperty(props, c.SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, true),
-            error.FailedToSetSdlBoolProperty,
-        );
-        try sdlCheckBool(
-            @src(),
-            c.SDL_SetBooleanProperty(props, c.SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, debug),
-            error.FailedToSetSdlPointerProperty,
-        );
-        try sdlCheckBool(
-            @src(),
-            c.SDL_SetStringProperty(props, c.SDL_PROP_GPU_DEVICE_CREATE_NAME_STRING, @ptrCast(gpu_driver_name)),
-            error.FailedToSetSdlPointerProperty,
-        );
-
-        // SPIRV for shaders so we can use slang
-        self._gpu_device = c.SDL_CreateGPUDeviceWithProperties(props) orelse {
-            log.err(@src(), "{s}", .{c.SDL_GetError()});
-            return RendererError.FailedToCreateGpuDevice;
-        };
-
-        if (!c.SDL_ClaimWindowForGPUDevice(self._gpu_device, self._window.toSdl())) {
-            log.err(@src(), "{s}", .{c.SDL_GetError()});
-            return RendererError.FailedToClaimWindowForGpu;
-        }
-
-        self._swapchain_format = c.SDL_GetGPUSwapchainTextureFormat(self._gpu_device, self._window.toSdl());
-
         try self.loadShaders(io, gpa, spirv_bin_dir_path);
 
         const command_buffer = try sdlCheck(
             @src(),
             *c.SDL_GPUCommandBuffer,
-            c.SDL_AcquireGPUCommandBuffer(self._gpu_device),
+            c.SDL_AcquireGPUCommandBuffer(self._gpu_device.toSdl()),
             RendererError.FailedToAcquireGpuCommandBuffer,
         );
 
         const vertices = [_]Vertex{
-            .{ .pos = .{ -0.5, 0.0 }, .col = .{ 1.0, 0.0, 0.0 } },
-            .{ .pos = .{ 0.5, 0.0 }, .col = .{ 0.0, 1.0, 0.0 } },
+            .{ .pos = .{ -0.5, -0.5 }, .col = .{ 1.0, 0.0, 0.0 } },
+            .{ .pos = .{ 0.5, -0.5 }, .col = .{ 0.0, 1.0, 0.0 } },
             .{ .pos = .{ 0, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
         };
 
         const buf_size = @sizeOf(@TypeOf(vertices));
 
-        self._vertex_buffer = try buf.Buffer.create(self._gpu_device, .Vertex, buf_size);
+        self._vertex_buffer = try buf.Buffer.create(self._gpu_device.toSdl(), .Vertex, buf_size);
 
-        var transfer_buffer = try buf.transfer.Upload.create(self._gpu_device, buf_size);
-        defer transfer_buffer.deinit(self._gpu_device);
+        var transfer_buffer = try buf.transfer.Upload.create(self._gpu_device.toSdl(), buf_size);
+        defer transfer_buffer.deinit(self._gpu_device.toSdl());
 
-        try transfer_buffer.upload(self._gpu_device, Vertex, &vertices);
+        try transfer_buffer.upload(self._gpu_device.toSdl(), Vertex, &vertices);
 
         const copy_pass = try sdlCheck(
             @src(),
@@ -188,7 +126,7 @@ pub const Renderer = struct {
         };
 
         self._depth_tex = try tex.Texture.create(
-            self._gpu_device,
+            self._gpu_device.toSdl(),
             ._2d,
             .D32_Float,
             .{ .depth_stencil_target = true },
@@ -269,28 +207,28 @@ pub const Renderer = struct {
         self._graphics_pipeline = try sdlCheck(
             @src(),
             *c.SDL_GPUGraphicsPipeline,
-            c.SDL_CreateGPUGraphicsPipeline(self._gpu_device, &gfx_pipeline_info),
+            c.SDL_CreateGPUGraphicsPipeline(self._gpu_device.toSdl(), &gfx_pipeline_info),
             RendererError.FailedToCreateGpuGraphicsPipeline,
         );
     }
 
     pub fn deinit(self: *@This()) void {
-        c.SDL_ReleaseGPUGraphicsPipeline(self._gpu_device, self._graphics_pipeline);
+        c.SDL_ReleaseGPUGraphicsPipeline(self._gpu_device.toSdl(), self._graphics_pipeline);
 
-        self._depth_tex.deinit(self._gpu_device);
+        self._depth_tex.deinit(self._gpu_device.toSdl());
 
-        self._vertex_buffer.deinit(self._gpu_device);
+        self._vertex_buffer.deinit(self._gpu_device.toSdl());
 
-        self._shaders.deinit(self._gpu_device);
+        self._shaders.deinit(self._gpu_device.toSdl());
 
-        c.SDL_DestroyGPUDevice(self._gpu_device);
+        self._gpu_device.deinit();
     }
 
     pub fn render(self: *@This()) !void {
         const command_buffer = try sdlCheck(
             @src(),
             *c.SDL_GPUCommandBuffer,
-            c.SDL_AcquireGPUCommandBuffer(self._gpu_device),
+            c.SDL_AcquireGPUCommandBuffer(self._gpu_device.toSdl()),
             RendererError.FailedToAcquireGpuCommandBuffer,
         );
 
@@ -390,7 +328,7 @@ pub const Renderer = struct {
             const binary_buf = try spirv_bin_dir.readFileAlloc(io, binary_file.path, arena, .unlimited);
 
             const shader = try Shader.create(
-                self._gpu_device,
+                self._gpu_device.toSdl(),
                 binary_buf.len * @sizeOf(u8),
                 binary_buf,
                 binary_file.entry,
