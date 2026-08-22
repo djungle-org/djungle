@@ -1,7 +1,12 @@
 .{
     .name = .engine,
     .version = "0.16.0",
-    .dependencies = .{},
+    .dependencies = .{
+        .vulkan = .{
+            .url = "git+https://github.com/Snektron/vulkan-zig?ref=zig-0.16-compat#b496a6a561ffbbeb530b0f9ed4e059f88c0723a5",
+            .hash = "vulkan-0.0.0-r7Ytx7N9AwD7IZt5_XNHtkJ4G9qY0pCH-cpcOsbL8wzD",
+        },
+    },
     .paths = .{""},
-    .fingerprint = 0xe8a81a8d866c08e5,
+    .fingerprint = 0xe8a81a8d9ff04485,
 }

@@ -24,6 +24,21 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
+    // const exe_check = b.addExecutable(.{
+    //     .name = "game",
+    //     .root_module = b.createModule(.{
+    //         .root_source_file = b.path("main.zig"),
+    //         .target = target,
+    //         .optimize = optimize,
+    //         .link_libc = true,
+    //     }),
+    // });
+    //
+    // exe_check.root_module.addImport("Engine", engine_module);
+    //
+    // const check = b.step("check", "Check if game compiles");
+    // check.dependOn(&exe_check.step);
+
     const compiled_shaders = engine_dep.namedLazyPath("compiled_shaders");
     // b.getInstallStep().dependOn(&b.addInstallDirectory(.{
     //     .source_dir = compiled_shaders,

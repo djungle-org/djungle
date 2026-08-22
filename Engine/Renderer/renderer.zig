@@ -7,6 +7,7 @@ const sdlCheckBool = @import("C").sdlCheckBool;
 const delque = @import("DeletionQueue");
 const win = @import("Window");
 const log = @import("Logging");
+const vk = @import("Vulkan");
 
 const types = @import("types.zig");
 
@@ -73,9 +74,13 @@ pub const Renderer = struct {
             .Metal => "metal",
         };
 
+        var draw_params_features = vk.PhysicalDeviceShaderDrawParametersFeatures{
+            .shader_draw_parameters = vk.Bool32.true,
+        };
+
         var vulkan_options = std.mem.zeroes(c.SDL_GPUVulkanOptions);
-        const vulkan_api_version: u32 = (0 << 29) | (1 << 22) | (3 << 12) | 0; // vulkan 1.3.0
-        vulkan_options.vulkan_api_version = vulkan_api_version;
+        vulkan_options.vulkan_api_version = vk.API_VERSION_1_3.toU32();
+        vulkan_options.feature_list = &draw_params_features;
 
         const props = c.SDL_CreateProperties();
         defer c.SDL_DestroyProperties(props);

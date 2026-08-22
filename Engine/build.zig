@@ -36,6 +36,15 @@ pub fn build(b: *std.Build) !void {
 
     // engine module
 
+    const vulkan_module = b.dependency("vulkan", .{
+        .registry = std.Build.LazyPath{
+            .cwd_relative = b.graph.environ_map.get("VULKAN_REGISTRY_XML") orelse {
+                return error.FailedToFindVulkan;
+                // std.debug.panic("VULKAN_REGISTRY_XML environment var not found", .{}); // for nixos
+            },
+        },
+    }).module("vulkan-zig");
+
     const c_module = b.addModule("C", .{
         .root_source_file = b.path("c.zig"),
         .target = target,
@@ -71,6 +80,7 @@ pub fn build(b: *std.Build) !void {
     });
 
     renderer_module.addImport("C", c_module);
+    renderer_module.addImport("Vulkan", vulkan_module);
     renderer_module.addImport("DeletionQueue", deletion_queue_module);
     renderer_module.addImport("Window", window_module);
 
@@ -90,4 +100,11 @@ pub fn build(b: *std.Build) !void {
     }
 
     engine_module.linkSystemLibrary("SDL3", .{ .needed = true });
+
+    const exe_check = b.addExecutable(.{
+        .name = "engine-check",
+        .root_module = renderer_module,
+    });
+    const check_step = b.step("check", "Check if it compiles");
+    check_step.dependOn(&exe_check.step);
 }
