@@ -1,25 +1,20 @@
 const std = @import("std");
-
 const c = @import("C").c;
-const sdlCheck = @import("C").sdlCheck;
-const sdlCheckBool = @import("C").sdlCheckBool;
-
-const delque = @import("DeletionQueue");
 const win = @import("Window");
 const log = @import("Logging");
 const vk = @import("Vulkan");
-
-const types = @import("types.zig");
-
+const t = @import("types.zig");
 const reg = @import("shader_registry.zig");
-const Shader = reg.Shader;
-const ShaderKind = reg.ShaderKind;
-const ShaderRegistry = reg.ShaderRegistry;
-
 const buf = @import("buffer.zig");
 const tex = @import("textures.zig");
 const dev = @import("gpu_device.zig");
 const cmd = @import("command_buffer.zig");
+
+const sdlCheck = @import("C").sdlCheck;
+const sdlCheckBool = @import("C").sdlCheckBool;
+const Shader = reg.Shader;
+const ShaderKind = reg.ShaderKind;
+const ShaderRegistry = reg.ShaderRegistry;
 
 pub const RendererError = error{
     FailedToCreateGpuDevice,
@@ -33,12 +28,9 @@ pub const RendererError = error{
     FailedToAcquireSwapchainTexture,
 };
 
-const Vec2 = @Vector(2, f32);
-const Vec3 = @Vector(3, f32);
-
 const Vertex = struct {
-    pos: Vec2,
-    col: Vec3,
+    pos: t.Vec2,
+    col: t.Vec3,
 };
 
 pub const Renderer = struct {
@@ -63,33 +55,7 @@ pub const Renderer = struct {
         self._shaders = try ShaderRegistry.init(gpa);
         try self.loadShaders(io, gpa, spirv_bin_dir_path);
 
-        var command_buffer = try cmd.CommandBuffer.acquire(&self._gpu_device);
-
-        const vertices = [_]Vertex{
-            .{ .pos = .{ -0.5, -0.5 }, .col = .{ 1.0, 0.0, 0.0 } },
-            .{ .pos = .{ 0.5, -0.5 }, .col = .{ 0.0, 1.0, 0.0 } },
-            .{ .pos = .{ 0, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
-        };
-
-        const buf_size = @sizeOf(@TypeOf(vertices));
-
-        self._vertex_buffer = try buf.Buffer.create(&self._gpu_device, .Vertex, buf_size);
-
-        var transfer_buffer = try buf.transfer.Upload.create(&self._gpu_device, buf_size);
-        defer transfer_buffer.deinit(&self._gpu_device);
-
-        try transfer_buffer.upload(&self._gpu_device, Vertex, &vertices);
-
-        const copy_pass = try command_buffer.beginCopyPass();
-
-        try self._vertex_buffer.upload(copy_pass, transfer_buffer, 0, .{
-            .offset = 0,
-            .size = buf_size,
-        });
-
-        c.SDL_EndGPUCopyPass(copy_pass);
-
-        try command_buffer.submit();
+        try self.uploadToVertexBuffer();
 
         self._vertex_buf_binding = c.SDL_GPUBufferBinding{
             .buffer = self._vertex_buffer.toSdl(),
@@ -113,7 +79,7 @@ pub const Renderer = struct {
                 .location = 1,
                 .buffer_slot = 0,
                 .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-                .offset = @sizeOf(Vec2),
+                .offset = @sizeOf(t.Vec2),
             },
         };
 
@@ -165,7 +131,7 @@ pub const Renderer = struct {
                 .enable_depth_clip = true,
             },
             .multisample_state = .{
-                .sample_count = types.SampleCount.toSdl(._1),
+                .sample_count = t.SampleCount.toSdl(._1),
                 .enable_alpha_to_coverage = false,
             },
             .depth_stencil_state = .{
@@ -329,5 +295,35 @@ pub const Renderer = struct {
 
             try self._shaders.put(binary_file.name, shader);
         }
+    }
+
+    fn uploadToVertexBuffer(self: *@This()) !void {
+        var command_buffer = try cmd.CommandBuffer.acquire(&self._gpu_device);
+
+        const vertices = [_]Vertex{
+            .{ .pos = .{ -0.5, -0.5 }, .col = .{ 1.0, 0.0, 0.0 } },
+            .{ .pos = .{ 0.5, -0.5 }, .col = .{ 0.0, 1.0, 0.0 } },
+            .{ .pos = .{ 0, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
+        };
+
+        const buf_size = @sizeOf(@TypeOf(vertices));
+
+        self._vertex_buffer = try buf.Buffer.create(&self._gpu_device, .Vertex, buf_size);
+
+        var transfer_buffer = try buf.transfer.Upload.create(&self._gpu_device, buf_size);
+        defer transfer_buffer.deinit(&self._gpu_device);
+
+        try transfer_buffer.upload(&self._gpu_device, Vertex, &vertices);
+
+        const copy_pass = try command_buffer.beginCopyPass();
+
+        try self._vertex_buffer.upload(copy_pass, transfer_buffer, 0, .{
+            .offset = 0,
+            .size = buf_size,
+        });
+
+        c.SDL_EndGPUCopyPass(copy_pass);
+
+        try command_buffer.submit();
     }
 };
