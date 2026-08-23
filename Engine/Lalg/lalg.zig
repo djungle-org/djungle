@@ -28,10 +28,10 @@ fn assertVectorType(comptime T: type) void {
     comptime switch (@typeInfo(T)) {
         .vector => |info| {
             if (info.child != f32) {
-                @compileError("Requires f32 vector, got" ++ @typeName(T));
+                @compileError("Requires f32 vector, got " ++ @typeName(T));
             }
         },
-        else => @compileError("Requires an @Vector type, got" ++ @typeName(T)),
+        else => @compileError("Requires an @Vector type, got " ++ @typeName(T)),
     };
 }
 
@@ -45,6 +45,26 @@ fn VecChild(comptime T: type) type {
     comptime assertVectorType(T);
 
     return @typeInfo(T).vector.child;
+}
+
+/// for now matrices have to be square
+fn assertMatrixType(comptime T: type) void {
+    comptime switch (@typeInfo(T)) {
+        .array => |info| {
+            assertVectorType(info.child);
+
+            if (info.len != vecLanes(info.child)) {
+                @compileError("Matrices must be square, got " ++ @typeName(T));
+            }
+        },
+        else => @compileError("Matrix must be an array of @Vectors, got " ++ @typeName(T)),
+    };
+}
+
+fn MatChild(comptime T: type) type {
+    comptime assertMatrixType(T);
+
+    return @typeInfo(T).array.child;
 }
 
 pub fn scaleVec(comptime VectorType: type, vec: VectorType, scalar: f32) VectorType {
@@ -151,6 +171,8 @@ test "normalize" {
 }
 
 pub fn transpose(comptime MatrixType: type, mat: MatrixType) MatrixType {
+    comptime assertMatrixType(MatrixType);
+
     var result: MatrixType = undefined;
 
     inline for (0..mat.len) |i| {
@@ -164,7 +186,9 @@ pub fn transpose(comptime MatrixType: type, mat: MatrixType) MatrixType {
 
 /// helper so you can write matrices in row-major layout, which is more natural,
 /// and then convert to column-major which is what is used in shaders and calculations
-pub fn toColumns(comptime MatrixType: type, comptime mat: MatrixType) MatrixType {
+pub fn toColumns(comptime MatrixType: type, mat: MatrixType) MatrixType {
+    comptime assertMatrixType(MatrixType);
+
     return transpose(MatrixType, mat);
 }
 
@@ -184,7 +208,9 @@ test "transpose" {
     try std.testing.expectEqual(res, mat);
 }
 
-pub fn mulMatVec(comptime MatrixType: type, mat: MatrixType, vec: @typeInfo(MatrixType).array.child) @typeInfo(MatrixType).array.child {
+pub fn mulMatVec(comptime MatrixType: type, mat: MatrixType, vec: MatChild(MatrixType)) @typeInfo(MatrixType).array.child {
+    comptime assertMatrixType(MatrixType);
+
     const VectorType = @typeInfo(MatrixType).array.child;
 
     var result: VectorType = @splat(0);
@@ -199,22 +225,23 @@ pub fn mulMatVec(comptime MatrixType: type, mat: MatrixType, vec: @typeInfo(Matr
 }
 
 test "matrix-vector multiply" {
-    const mat = toColumns(Mat3, .{
-        .{ 1, 2, 3 },
-        .{ 3, 2, 1 },
-        .{ 1, 2, 3 },
+    const mat = toColumns(Mat4, .{
+        .{ 1, 2, 3, 7 },
+        .{ 3, 2, 1, 2 },
+        .{ 1, 4, 3, 9 },
+        .{ 5, 3, 6, 8 },
     });
 
-    const vec = Vec3{ 4, 5, 6 };
+    const vec = Vec4{ 4, 5, 6, 2 };
 
-    const res = mulMatVec(Mat3, mat, vec);
+    const res = mulMatVec(Mat4, mat, vec);
 
-    const expected = Vec3{ 32, 28, 32 };
-
-    try std.testing.expectEqual(expected, res);
+    try std.testing.expectEqual(Vec4{ 46, 32, 60, 87 }, res);
 }
 
 pub fn mulMat(comptime MatrixType: type, mat1: MatrixType, mat2: MatrixType) MatrixType {
+    comptime assertMatrixType(MatrixType);
+
     var result: MatrixType = undefined;
 
     inline for (0..mat2.len) |i| {
@@ -237,33 +264,90 @@ test "matrix multiply" {
         .{ 4, 6, 5 },
     });
 
-    const res = mulMat(Mat3, mat1, mat2);
+    var res = mulMat(Mat3, mat1, mat2);
 
-    const expected = toColumns(Mat3, .{
+    var expected = toColumns(Mat3, .{
         .{ 28, 33, 29 },
         .{ 28, 31, 31 },
         .{ 30, 32, 28 },
     });
 
     try std.testing.expectEqual(expected, res);
+
+    // non commutative
+    res = mulMat(Mat3, mat2, mat1);
+
+    expected = toColumns(Mat3, .{
+        .{ 25, 36, 29 },
+        .{ 25, 34, 31 },
+        .{ 27, 35, 28 },
+    });
+
+    try std.testing.expectEqual(expected, res);
 }
 
-pub fn translate(comptime MatrixType: type) MatrixType {}
+pub fn translate(offset: Vec3) Mat4 {
+    const translation_mat = toColumns(Mat4, .{
+        .{ 1, 0, 0, offset[0] },
+        .{ 0, 1, 0, offset[1] },
+        .{ 0, 0, 1, offset[2] },
+        .{ 0, 0, 0, 1 },
+    });
 
-test "matrix translate" {}
+    return translation_mat;
+}
 
-pub fn rotate(comptime MatrixType: type) MatrixType {}
+test "matrix translate" {
+    const translation = translate(.{ 3, 4, 5 });
+
+    var expected = toColumns(Mat4, .{
+        .{ 1, 0, 0, 3 },
+        .{ 0, 1, 0, 4 },
+        .{ 0, 0, 1, 5 },
+        .{ 0, 0, 0, 1 },
+    });
+
+    try std.testing.expectEqual(expected, translation);
+
+    const mat = toColumns(Mat4, .{
+        .{ 3, 2, 4, 1 },
+        .{ 6, 5, 2, 1 },
+        .{ 2, 3, 5, 1 },
+        .{ 1, 1, 1, 1 },
+    });
+
+    const translated = mulMat(Mat4, translation, mat);
+
+    expected = toColumns(Mat4, .{
+        .{ 6, 5, 7, 4 },
+        .{ 10, 9, 6, 5 },
+        .{ 7, 8, 10, 6 },
+        .{ 1, 1, 1, 1 },
+    });
+
+    try std.testing.expectEqual(expected, translated);
+}
+
+pub fn rotate(comptime MatrixType: type) MatrixType {
+    comptime assertMatrixType(MatrixType);
+}
 
 test "matrix rotate" {}
 
-pub fn scale(comptime MatrixType: type) MatrixType {}
+pub fn scale(comptime MatrixType: type) MatrixType {
+    comptime assertMatrixType(MatrixType);
+}
 
 test "matrix scale" {}
 
-pub fn lookAt(comptime MatrixType: type) MatrixType {}
+pub fn lookAt(comptime MatrixType: type) MatrixType {
+    comptime assertMatrixType(MatrixType);
+}
 
 test "matrix lookAt" {}
 
-pub fn perspective(comptime MatrixType: type) MatrixType {}
+pub fn perspective(comptime MatrixType: type) MatrixType {
+    comptime assertMatrixType(MatrixType);
+}
 
 test "matrix perspective" {}
