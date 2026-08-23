@@ -9,6 +9,7 @@ const buf = @import("buffer.zig");
 const tex = @import("textures.zig");
 const dev = @import("gpu_device.zig");
 const cmd = @import("command_buffer.zig");
+const math = @import("Math");
 
 const sdlCheck = @import("C").sdlCheck;
 const sdlCheckBool = @import("C").sdlCheckBool;
@@ -29,15 +30,13 @@ pub const RendererError = error{
 };
 
 const Vertex = struct {
-    pos: t.Vec2,
-    col: t.Vec3,
+    pos: math.Vec2,
+    col: math.Vec3,
 };
 
 pub const Renderer = struct {
     _window: *win.Window,
     _swapchain_format: tex.TextureFormat,
-    _swapchain_tex_w: u32,
-    _swapchain_tex_h: u32,
     _gpu_device: dev.GpuDevice,
     _depth_tex: tex.Texture,
     _vertex_buffer: buf.Buffer,
@@ -79,7 +78,7 @@ pub const Renderer = struct {
                 .location = 1,
                 .buffer_slot = 0,
                 .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-                .offset = @sizeOf(t.Vec2),
+                .offset = @sizeOf(math.Vec2),
             },
         };
 
@@ -183,28 +182,12 @@ pub const Renderer = struct {
     }
 
     pub fn render(self: *@This()) !void {
-        const command_buffer = try sdlCheck(
-            @src(),
-            *c.SDL_GPUCommandBuffer,
-            c.SDL_AcquireGPUCommandBuffer(self._gpu_device.toSdl()),
-            RendererError.FailedToAcquireGpuCommandBuffer,
-        );
+        var command_buffer = try cmd.CommandBuffer.acquire(&self._gpu_device);
 
-        var swapchain_tex: ?*c.SDL_GPUTexture = null;
-        try sdlCheckBool(
-            @src(),
-            c.SDL_WaitAndAcquireGPUSwapchainTexture(
-                command_buffer,
-                self._window.toSdl(),
-                &swapchain_tex,
-                &self._swapchain_tex_w,
-                &self._swapchain_tex_h,
-            ),
-            RendererError.FailedToAcquireSwapchainTexture,
-        );
+        var swapchain_tex = try command_buffer.waitAndAcquireSwapchainTexture(&self._gpu_device, self._window);
 
         const color_target_info = c.SDL_GPUColorTargetInfo{
-            .texture = swapchain_tex.?,
+            .texture = swapchain_tex.toSdl(),
             .mip_level = 0,
             .layer_or_depth_plane = 0,
             .clear_color = .{ .r = 0.5, .g = 0.2, .b = 0.7, .a = 1.0 },
@@ -231,7 +214,7 @@ pub const Renderer = struct {
             @src(),
             *c.SDL_GPURenderPass,
             c.SDL_BeginGPURenderPass(
-                command_buffer,
+                command_buffer.toSdl(),
                 &color_target_info,
                 1,
                 &depth_stencil_target_info,
@@ -244,8 +227,8 @@ pub const Renderer = struct {
         const viewport = c.SDL_GPUViewport{
             .x = 0,
             .y = 0,
-            .w = @floatFromInt(self._swapchain_tex_w),
-            .h = @floatFromInt(self._swapchain_tex_h),
+            .w = @floatFromInt(swapchain_tex.width),
+            .h = @floatFromInt(swapchain_tex.height),
             .min_depth = 0,
             .max_depth = 1,
         };
@@ -257,7 +240,7 @@ pub const Renderer = struct {
 
         c.SDL_EndGPURenderPass(render_pass);
 
-        try sdlCheckBool(@src(), c.SDL_SubmitGPUCommandBuffer(command_buffer), RendererError.FailedToSubmitGpuCommandBuffer);
+        try command_buffer.submit();
     }
 
     fn loadShaders(self: *@This(), io: std.Io, allocator: std.mem.Allocator, spirv_bin_dir_path: []const u8) !void {

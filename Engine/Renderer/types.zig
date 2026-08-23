@@ -1,8 +1,5 @@
 const c = @import("C").c;
 
-pub const Vec2 = @Vector(2, f32);
-pub const Vec3 = @Vector(3, f32);
-
 pub const SampleCount = enum {
     _1,
     _2,

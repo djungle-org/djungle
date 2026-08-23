@@ -5,12 +5,14 @@ const GpuDevice = @import("gpu_device.zig").GpuDevice;
 
 const sdlCheck = @import("C").sdlCheck;
 const sdlCheckBool = @import("C").sdlCheckBool;
-const TextureFormat = @import("textures.zig").TextureFormat;
+const tex = @import("textures.zig");
+const TextureFormat = tex.TextureFormat;
 
 pub const CommandBufferError = error{
     FailedToAcquire,
     FailedToSubmit,
     FailedToBeginCopyPass,
+    FailedToAcquireSwapchainTexture,
 };
 
 pub const CommandBuffer = struct {
@@ -31,6 +33,10 @@ pub const CommandBuffer = struct {
         try sdlCheckBool(@src(), c.SDL_SubmitGPUCommandBuffer(self.toSdl()), CommandBufferError.FailedToSubmit);
     }
 
+    pub fn toSdl(self: *@This()) *c.SDL_GPUCommandBuffer {
+        return self._sdl_command_buffer;
+    }
+
     pub fn beginCopyPass(self: *@This()) !*c.SDL_GPUCopyPass {
         return try sdlCheck(
             @src(),
@@ -40,7 +46,31 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn toSdl(self: *@This()) *c.SDL_GPUCommandBuffer {
-        return self._sdl_command_buffer;
+    pub fn waitAndAcquireSwapchainTexture(self: *@This(), gpu_device: *GpuDevice, window: *win.Window) !tex.SwapchainTexture {
+        var swapchain_tex: ?*c.SDL_GPUTexture = null;
+        var swapchain_tex_width: u32 = undefined;
+        var swapchain_tex_height: u32 = undefined;
+
+        try sdlCheckBool(
+            @src(),
+            c.SDL_WaitAndAcquireGPUSwapchainTexture(
+                self.toSdl(),
+                window.toSdl(),
+                &swapchain_tex,
+                &swapchain_tex_width,
+                &swapchain_tex_height,
+            ),
+            CommandBufferError.FailedToAcquireSwapchainTexture,
+        );
+
+        const texture = swapchain_tex orelse return CommandBufferError.FailedToAcquireSwapchainTexture;
+
+        const format = try gpu_device.getSwapchainFormat(window);
+        return tex.SwapchainTexture.create(texture, format, swapchain_tex_width, swapchain_tex_height);
+    }
+
+    /// data must be in std140 layout conventions
+    pub fn pushVertexUniformData(self: *@This(), slot_idx: u32, comptime T: type, push_data: T) void {
+        c.SDL_PushGPUVertexUniformData(self.toSdl(), slot_idx, push_data, @sizeOf(T));
     }
 };

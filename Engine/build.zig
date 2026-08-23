@@ -63,6 +63,12 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
+    const math_module = b.addModule("Math", .{
+        .root_source_file = b.path("Math/math.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const window_module = b.addModule("Window", .{
         .root_source_file = b.path("Window/window.zig"),
         .target = target,
@@ -81,6 +87,7 @@ pub fn build(b: *std.Build) !void {
 
     renderer_module.addImport("C", c_module);
     renderer_module.addImport("Vulkan", vulkan_module);
+    renderer_module.addImport("Math", math_module);
     renderer_module.addImport("DeletionQueue", deletion_queue_module);
     renderer_module.addImport("Window", window_module);
 
@@ -91,6 +98,7 @@ pub fn build(b: *std.Build) !void {
         .link_libc = true,
     });
 
+    engine_module.addImport("Math", math_module);
     engine_module.addImport("DeletionQueue", deletion_queue_module);
     engine_module.addImport("Window", window_module);
     engine_module.addImport("Renderer", renderer_module);

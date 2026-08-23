@@ -90,6 +90,9 @@ pub const Texture = struct {
     format: TextureFormat,
     usage: TextureUsage,
 
+    width: u32,
+    height: u32,
+
     /// sampler + graphics_storage_read or compute_storage_read is invalid and will return an error
     pub fn create(
         gpu_device: *GpuDevice,
@@ -130,6 +133,8 @@ pub const Texture = struct {
             .tex_type = tex_type,
             .format = format,
             .usage = usage,
+            .width = width,
+            .height = height,
         };
     }
 
@@ -137,10 +142,36 @@ pub const Texture = struct {
         c.SDL_ReleaseGPUTexture(gpu_device.toSdl(), self._sdl_texture);
     }
 
+    pub fn toSdl(self: *@This()) *c.SDL_GPUTexture {
+        return self._sdl_texture;
+    }
+
     /// needs to be implemented
     pub fn upload(self: *@This(), gpu_device: *GpuDevice) void {
         _ = self;
         _ = gpu_device;
+    }
+};
+
+pub const SwapchainTexture = struct {
+    _sdl_texture: *c.SDL_GPUTexture,
+    format: TextureFormat,
+
+    width: u32,
+    height: u32,
+
+    pub fn create(
+        sdl_texture: *c.SDL_GPUTexture,
+        format: TextureFormat,
+        width: u32,
+        height: u32,
+    ) !@This() {
+        return .{
+            ._sdl_texture = sdl_texture,
+            .format = format,
+            .width = width,
+            .height = height,
+        };
     }
 
     pub fn toSdl(self: *@This()) *c.SDL_GPUTexture {
