@@ -1,4 +1,8 @@
-pub const std = @import("std");
+const std = @import("std");
+
+pub const VectorError = error{
+    DivByZero,
+};
 
 // all vectors origin is 0
 
@@ -30,6 +34,18 @@ fn assertVectorType(comptime T: type) void {
     };
 }
 
+fn vecLanes(comptime T: type) comptime_int {
+    comptime assertVectorType(T);
+
+    return @typeInfo(T).vector.len;
+}
+
+fn VecChild(comptime T: type) type {
+    comptime assertVectorType(T);
+
+    return @typeInfo(T).vector.child;
+}
+
 pub fn dot(comptime VectorType: type, vec1: VectorType, vec2: VectorType) f32 {
     comptime assertVectorType(VectorType);
 
@@ -50,7 +66,7 @@ test "dot product" {
 
     res = dot(Vec2, vec1, vec2);
 
-    try std.testing.expectEqual(5735.7993, res);
+    try std.testing.expectApproxEqAbs(5735.7993, res, std.math.floatEps(f32));
 }
 
 pub fn cross(lhs: Vec3, rhs: Vec3) Vec3 {
@@ -70,4 +86,59 @@ test "cross product" {
     const res = cross(vec1, vec2);
 
     try std.testing.expectEqual(Vec3{ -2, 4, -2 }, res);
+}
+
+pub fn magSqr(comptime VectorType: type, vec: VectorType) f32 {
+    comptime assertVectorType(VectorType);
+
+    const sqr = vec * vec;
+
+    return @reduce(.Add, sqr);
+}
+
+test "magSqr" {
+    const vec = Vec3{ 3, 4, 0 };
+
+    const res = magSqr(Vec3, vec);
+
+    try std.testing.expectEqual(25, res);
+}
+
+pub fn mag(comptime VectorType: type, vec: VectorType) f32 {
+    comptime assertVectorType(VectorType);
+
+    const mag_sqr = magSqr(VectorType, vec);
+
+    return @sqrt(mag_sqr);
+}
+
+test "mag" {
+    const vec = Vec3{ 3, 4, 0 };
+
+    const res = mag(Vec3, vec);
+
+    try std.testing.expectEqual(5, res);
+}
+
+pub fn normalize(comptime VectorType: type, vec: VectorType) !VectorType {
+    comptime assertVectorType(VectorType);
+
+    const magnitude = mag(VectorType, vec);
+    if (magnitude == 0.0) return VectorError.DivByZero;
+
+    const magnitude_simd: @Vector(vecLanes(VectorType), VecChild(VectorType)) = @splat(magnitude);
+
+    return vec / magnitude_simd;
+}
+
+test "normalize" {
+    var vec = Vec3{ 3, 4, 0 };
+
+    const res = try normalize(Vec3, vec);
+
+    try std.testing.expectEqual(Vec3{ 0.6, 0.8, 0 }, res);
+
+    vec = Vec3{ 0, 0, 0 };
+
+    try std.testing.expectError(VectorError.DivByZero, normalize(Vec3, vec));
 }

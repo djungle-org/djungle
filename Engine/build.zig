@@ -61,15 +61,15 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
-    const math_module = b.addModule("Math", .{
-        .root_source_file = b.path("Math/math.zig"),
+    const lalg_module = b.addModule("Lalg", .{
+        .root_source_file = b.path("Lalg/lalg.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    const math_tests = b.addTest(.{ .root_module = math_module });
-    const run_math_tests = b.addRunArtifact(math_tests);
-    test_step.dependOn(&run_math_tests.step);
+    const lalg_tests = b.addTest(.{ .root_module = lalg_module });
+    const run_lalg_tests = b.addRunArtifact(lalg_tests);
+    test_step.dependOn(&run_lalg_tests.step);
 
     const window_module = b.addModule("Window", .{
         .root_source_file = b.path("Window/window.zig"),
@@ -89,7 +89,7 @@ pub fn build(b: *std.Build) !void {
 
     renderer_module.addImport("C", c_module);
     renderer_module.addImport("Vulkan", vulkan_module);
-    renderer_module.addImport("Math", math_module);
+    renderer_module.addImport("Lalg", lalg_module);
     renderer_module.addImport("DeletionQueue", deletion_queue_module);
     renderer_module.addImport("Window", window_module);
 
@@ -100,7 +100,7 @@ pub fn build(b: *std.Build) !void {
         .link_libc = true,
     });
 
-    engine_module.addImport("Math", math_module);
+    engine_module.addImport("Lalg", lalg_module);
     engine_module.addImport("DeletionQueue", deletion_queue_module);
     engine_module.addImport("Window", window_module);
     engine_module.addImport("Renderer", renderer_module);

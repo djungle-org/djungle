@@ -9,7 +9,7 @@ const buf = @import("buffer.zig");
 const tex = @import("textures.zig");
 const dev = @import("gpu_device.zig");
 const cmd = @import("command_buffer.zig");
-const math = @import("Math");
+const lalg = @import("Lalg");
 
 const sdlCheck = @import("C").sdlCheck;
 const sdlCheckBool = @import("C").sdlCheckBool;
@@ -30,8 +30,8 @@ pub const RendererError = error{
 };
 
 const Vertex = struct {
-    pos: math.Vec2,
-    col: math.Vec3,
+    pos: lalg.Vec2,
+    col: lalg.Vec3,
 };
 
 pub const Renderer = struct {
@@ -78,7 +78,7 @@ pub const Renderer = struct {
                 .location = 1,
                 .buffer_slot = 0,
                 .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-                .offset = @sizeOf(math.Vec2),
+                .offset = @sizeOf(lalg.Vec2),
             },
         };
 
