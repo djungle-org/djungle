@@ -10,9 +10,10 @@ pub const Vec2 = @Vector(2, f32);
 pub const Vec3 = @Vector(3, f32);
 pub const Vec4 = @Vector(4, f32);
 
-pub const Mat2 = [2]@Vector(2, f32);
-pub const Mat3 = [3]@Vector(3, f32);
-pub const Mat4 = [4]@Vector(4, f32);
+/// column major, each element of array is a column
+pub const Mat2 = [2]Vec2;
+pub const Mat3 = [3]Vec3;
+pub const Mat4 = [4]Vec4;
 
 test "add 2 vectors" {
     const vec1 = Vec3{ 0, 5, 2 };
@@ -44,6 +45,14 @@ fn VecChild(comptime T: type) type {
     comptime assertVectorType(T);
 
     return @typeInfo(T).vector.child;
+}
+
+pub fn scaleVec(comptime VectorType: type, vec: VectorType, scalar: f32) VectorType {
+    comptime assertVectorType(VectorType);
+
+    const scalar_simd: VectorType = @splat(scalar);
+
+    return vec * scalar_simd;
 }
 
 pub fn dot(comptime VectorType: type, vec1: VectorType, vec2: VectorType) f32 {
@@ -126,9 +135,7 @@ pub fn normalize(comptime VectorType: type, vec: VectorType) !VectorType {
     const magnitude = mag(VectorType, vec);
     if (magnitude == 0.0) return VectorError.DivByZero;
 
-    const magnitude_simd: @Vector(vecLanes(VectorType), VecChild(VectorType)) = @splat(magnitude);
-
-    return vec / magnitude_simd;
+    return scaleVec(VectorType, vec, 1 / magnitude);
 }
 
 test "normalize" {
@@ -142,3 +149,121 @@ test "normalize" {
 
     try std.testing.expectError(VectorError.DivByZero, normalize(Vec3, vec));
 }
+
+pub fn transpose(comptime MatrixType: type, mat: MatrixType) MatrixType {
+    var result: MatrixType = undefined;
+
+    inline for (0..mat.len) |i| {
+        inline for (0..mat.len) |j| {
+            result[i][j] = mat[j][i];
+        }
+    }
+
+    return result;
+}
+
+/// helper so you can write matrices in row-major layout, which is more natural,
+/// and then convert to column-major which is what is used in shaders and calculations
+pub fn toColumns(comptime MatrixType: type, comptime mat: MatrixType) MatrixType {
+    return transpose(MatrixType, mat);
+}
+
+test "transpose" {
+    const mat = comptime transpose(Mat3, .{
+        .{ 1, 2, 3 },
+        .{ 3, 2, 1 },
+        .{ 1, 3, 2 },
+    });
+
+    const res = Mat3{
+        .{ 1, 3, 1 },
+        .{ 2, 2, 3 },
+        .{ 3, 1, 2 },
+    };
+
+    try std.testing.expectEqual(res, mat);
+}
+
+pub fn mulMatVec(comptime MatrixType: type, mat: MatrixType, vec: @typeInfo(MatrixType).array.child) @typeInfo(MatrixType).array.child {
+    const VectorType = @typeInfo(MatrixType).array.child;
+
+    var result: VectorType = @splat(0);
+
+    inline for (0..mat.len) |i| {
+        const scaled_column = scaleVec(VectorType, mat[i], vec[i]);
+
+        result += scaled_column;
+    }
+
+    return result;
+}
+
+test "matrix-vector multiply" {
+    const mat = toColumns(Mat3, .{
+        .{ 1, 2, 3 },
+        .{ 3, 2, 1 },
+        .{ 1, 2, 3 },
+    });
+
+    const vec = Vec3{ 4, 5, 6 };
+
+    const res = mulMatVec(Mat3, mat, vec);
+
+    const expected = Vec3{ 32, 28, 32 };
+
+    try std.testing.expectEqual(expected, res);
+}
+
+pub fn mulMat(comptime MatrixType: type, mat1: MatrixType, mat2: MatrixType) MatrixType {
+    var result: MatrixType = undefined;
+
+    inline for (0..mat2.len) |i| {
+        result[i] = mulMatVec(MatrixType, mat1, mat2[i]);
+    }
+
+    return result;
+}
+
+test "matrix multiply" {
+    const mat1 = toColumns(Mat3, .{
+        .{ 1, 2, 3 },
+        .{ 3, 2, 1 },
+        .{ 1, 3, 2 },
+    });
+
+    const mat2 = toColumns(Mat3, .{
+        .{ 4, 5, 6 },
+        .{ 6, 5, 4 },
+        .{ 4, 6, 5 },
+    });
+
+    const res = mulMat(Mat3, mat1, mat2);
+
+    const expected = toColumns(Mat3, .{
+        .{ 28, 33, 29 },
+        .{ 28, 31, 31 },
+        .{ 30, 32, 28 },
+    });
+
+    try std.testing.expectEqual(expected, res);
+}
+
+pub fn translate(comptime MatrixType: type) MatrixType {}
+
+test "matrix translate" {}
+
+pub fn rotate(comptime MatrixType: type) MatrixType {}
+
+test "matrix rotate" {}
+
+pub fn scale(comptime MatrixType: type) MatrixType {}
+
+test "matrix scale" {}
+
+pub fn lookAt(comptime MatrixType: type) MatrixType {}
+
+test "matrix lookAt" {}
+
+pub fn perspective(comptime MatrixType: type) MatrixType {}
+
+test "matrix perspective" {}
