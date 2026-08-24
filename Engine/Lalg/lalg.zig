@@ -526,8 +526,32 @@ test "matrix lookAt" {
     try std.testing.expectEqual(expected, result);
 }
 
-pub fn perspective(comptime MatrixType: type) MatrixType {
-    comptime assertMatrixType(MatrixType);
+/// aspect_ratio: width / height
+pub fn perspective(aspect_ratio: f32, fov: f32, near: f32, far: f32) Mat4 {
+    const tan_half_fov = @tan(fov / 2);
+
+    const x_scale = 1 / (aspect_ratio * tan_half_fov);
+    const y_scale = 1 / tan_half_fov;
+    const z_remap1 = -(far + near) / (far - near);
+    const z_remap2 = -(2 * far * near) / (far - near);
+
+    return toColumns(Mat4, .{
+        .{ x_scale, 0, 0, 0 },
+        .{ 0, y_scale, 0, 0 },
+        .{ 0, 0, z_remap1, z_remap2 },
+        .{ 0, 0, -1, 0 },
+    });
 }
 
-test "matrix perspective" {}
+test "matrix perspective" {
+    const perspective_transform = perspective(2, std.math.degreesToRadians(90), 1, 2);
+
+    const expected = toColumns(Mat4, .{
+        .{ 0.5, 0, 0, 0 },
+        .{ 0, 1, 0, 0 },
+        .{ 0, 0, -3, -4 },
+        .{ 0, 0, -1, 0 },
+    });
+
+    try std.testing.expectEqual(expected, perspective_transform);
+}
