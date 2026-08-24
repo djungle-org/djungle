@@ -10,7 +10,8 @@ pub const Vec2 = @Vector(2, f32);
 pub const Vec3 = @Vector(3, f32);
 pub const Vec4 = @Vector(4, f32);
 
-/// column major, each element of array is a column
+// column major, each element of array is a column
+
 pub const Mat2 = [2]Vec2;
 pub const Mat3 = [3]Vec3;
 pub const Mat4 = [4]Vec4;
@@ -199,13 +200,104 @@ test "transpose" {
         .{ 1, 3, 2 },
     });
 
-    const res = Mat3{
+    const expected = Mat3{
         .{ 1, 3, 1 },
         .{ 2, 2, 3 },
         .{ 3, 1, 2 },
     };
 
-    try std.testing.expectEqual(res, mat);
+    try std.testing.expectEqual(expected, mat);
+}
+
+pub fn identityMat(comptime MatrixType: type) MatrixType {
+    comptime assertMatrixType(MatrixType);
+
+    var identity = std.mem.zeroes(MatrixType);
+
+    inline for (0..@typeInfo(MatrixType).array.len) |i| {
+        identity[i][i] = 1;
+    }
+
+    return identity;
+}
+
+test "identity matrix" {
+    const identity = identityMat(Mat4);
+
+    const expected = toColumns(Mat4, .{
+        .{ 1, 0, 0, 0 },
+        .{ 0, 1, 0, 0 },
+        .{ 0, 0, 1, 0 },
+        .{ 0, 0, 0, 1 },
+    });
+
+    try std.testing.expectEqual(identity, expected);
+}
+
+pub fn addMat(comptime MatrixType: type, mat1: MatrixType, mat2: MatrixType) MatrixType {
+    comptime assertMatrixType(MatrixType);
+
+    var result = mat1;
+
+    inline for (0..mat1.len) |i| {
+        result[i] += mat2[i];
+    }
+
+    return result;
+}
+
+test "matrix addition" {
+    const mat1 = toColumns(Mat3, .{
+        .{ 1, 2, 3 },
+        .{ 3, 2, 1 },
+        .{ 1, 3, 2 },
+    });
+
+    const mat2 = toColumns(Mat3, .{
+        .{ 4, 5, 6 },
+        .{ 6, 5, 4 },
+        .{ 4, 6, 5 },
+    });
+
+    const result = addMat(Mat3, mat1, mat2);
+
+    const expected = toColumns(Mat3, .{
+        .{ 5, 7, 9 },
+        .{ 9, 7, 5 },
+        .{ 5, 9, 7 },
+    });
+
+    try std.testing.expectEqual(expected, result);
+}
+
+pub fn mulMatScalar(comptime MatrixType: type, mat: MatrixType, scalar: f32) MatrixType {
+    var result: MatrixType = undefined;
+
+    inline for (0..mat.len) |i| {
+        result[i] = scaleVec(MatChild(MatrixType), mat[i], scalar);
+    }
+
+    return result;
+}
+
+test "matrix-scalar multiply" {
+    const mat = toColumns(Mat4, .{
+        .{ 1, 0, 2, 3 },
+        .{ 4, 2, 1, 7 },
+        .{ 9, 3, 8, 4 },
+        .{ 1, 6, 2, 5 },
+    });
+
+    const res = mulMatScalar(Mat4, mat, 2);
+
+    const expected = toColumns(Mat4, .{
+        .{ 2, 0, 4, 6 },
+        .{ 8, 4, 2, 14 },
+        .{ 18, 6, 16, 8 },
+        .{ 2, 12, 4, 10 },
+    });
+
+    try std.testing.expectEqual(expected, res);
 }
 
 pub fn mulMatVec(comptime MatrixType: type, mat: MatrixType, vec: MatChild(MatrixType)) @typeInfo(MatrixType).array.child {
@@ -287,14 +379,12 @@ test "matrix multiply" {
 }
 
 pub fn translate(offset: Vec3) Mat4 {
-    const translation_mat = toColumns(Mat4, .{
+    return toColumns(Mat4, .{
         .{ 1, 0, 0, offset[0] },
         .{ 0, 1, 0, offset[1] },
         .{ 0, 0, 1, offset[2] },
         .{ 0, 0, 0, 1 },
     });
-
-    return translation_mat;
 }
 
 test "matrix translate" {
@@ -328,17 +418,68 @@ test "matrix translate" {
     try std.testing.expectEqual(expected, translated);
 }
 
-pub fn rotate(comptime MatrixType: type) MatrixType {
-    comptime assertMatrixType(MatrixType);
+/// axis will be normalized
+pub fn rotate(axis: Vec3, radians: f32) !Mat4 {
+    const axis_n = try normalize(Vec3, axis);
+
+    const axis_mat = toColumns(Mat3, .{
+        .{ 0, -axis_n[2], axis_n[1] },
+        .{ axis_n[2], 0, -axis_n[0] },
+        .{ -axis_n[1], axis_n[0], 0 },
+    });
+
+    const axis_mat_sqr = mulMat(Mat3, axis_mat, axis_mat);
+
+    const identity = identityMat(Mat3);
+    const sin = mulMatScalar(Mat3, axis_mat, @sin(radians));
+    const cos = mulMatScalar(Mat3, axis_mat_sqr, 1 - @cos(radians));
+
+    const rotation = addMat(Mat3, identity, addMat(Mat3, sin, cos));
+
+    const mat4 = toColumns(Mat4, .{
+        .{ rotation[0][0], rotation[1][0], rotation[2][0], 0 },
+        .{ rotation[0][1], rotation[1][1], rotation[2][1], 0 },
+        .{ rotation[0][2], rotation[1][2], rotation[2][2], 0 },
+        .{ 0, 0, 0, 1 },
+    });
+
+    return mat4;
 }
 
-test "matrix rotate" {}
+test "matrix rotate" {
+    const rotated = try rotate(.{ 0, 0, 1 }, std.math.degreesToRadians(90));
 
-pub fn scale(comptime MatrixType: type) MatrixType {
-    comptime assertMatrixType(MatrixType);
+    const expected = toColumns(Mat4, .{
+        .{ 0, -1, 0, 0 },
+        .{ 1, 0, 0, 0 },
+        .{ 0, 0, 1, 0 },
+        .{ 0, 0, 0, 1 },
+    });
+
+    try std.testing.expectEqual(expected, rotated);
 }
 
-test "matrix scale" {}
+pub fn scale(vec: Vec3) Mat4 {
+    return toColumns(Mat4, .{
+        .{ vec[0], 0, 0, 0 },
+        .{ 0, vec[1], 0, 0 },
+        .{ 0, 0, vec[2], 0 },
+        .{ 0, 0, 0, 1 },
+    });
+}
+
+test "matrix scale" {
+    const scaled = scale(.{ 4, 3, 1 });
+
+    const expected = toColumns(Mat4, .{
+        .{ 4, 0, 0, 0 },
+        .{ 0, 3, 0, 0 },
+        .{ 0, 0, 1, 0 },
+        .{ 0, 0, 0, 1 },
+    });
+
+    try std.testing.expectEqual(expected, scaled);
+}
 
 pub fn lookAt(comptime MatrixType: type) MatrixType {
     comptime assertMatrixType(MatrixType);
