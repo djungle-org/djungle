@@ -481,11 +481,50 @@ test "matrix scale" {
     try std.testing.expectEqual(expected, scaled);
 }
 
-pub fn lookAt(comptime MatrixType: type) MatrixType {
-    comptime assertMatrixType(MatrixType);
+pub fn lookAt(eye: Vec3, target: Vec3, world_up: Vec3) !Mat4 {
+    const forward = try normalize(Vec3, eye - target);
+    const right = try normalize(Vec3, cross(world_up, forward));
+    const up = cross(forward, right);
+
+    const translation = translate(.{
+        -dot(Vec3, right, eye),
+        -dot(Vec3, up, eye),
+        -dot(Vec3, forward, eye),
+    });
+
+    const rotation = toColumns(Mat4, .{
+        .{ right[0], right[1], right[2], 0 },
+        .{ up[0], up[1], up[2], 0 },
+        .{ forward[0], forward[1], forward[2], 0 },
+        .{ 0, 0, 0, 1 },
+    });
+
+    return mulMat(Mat4, rotation, translation);
 }
 
-test "matrix lookAt" {}
+test "matrix lookAt" {
+    var result = try lookAt(.{ 0, 0, 0 }, .{ 0, 0, -1 }, .{ 0, 1, 0 });
+
+    var expected = toColumns(Mat4, .{
+        .{ 1, 0, 0, 0 },
+        .{ 0, 1, 0, 0 },
+        .{ 0, 0, 1, 0 },
+        .{ 0, 0, 0, 1 },
+    });
+
+    try std.testing.expectEqual(expected, result);
+
+    result = try lookAt(.{ 2, 3, 5 }, .{ 2, 3, 4 }, .{ 0, 1, 0 });
+
+    expected = toColumns(Mat4, .{
+        .{ 1, 0, 0, -2 },
+        .{ 0, 1, 0, -3 },
+        .{ 0, 0, 1, -5 },
+        .{ 0, 0, 0, 1 },
+    });
+
+    try std.testing.expectEqual(expected, result);
+}
 
 pub fn perspective(comptime MatrixType: type) MatrixType {
     comptime assertMatrixType(MatrixType);
