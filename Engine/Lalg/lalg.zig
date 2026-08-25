@@ -11,6 +11,7 @@ pub const Vec3 = @Vector(3, f32);
 pub const Vec4 = @Vector(4, f32);
 
 // column major, each element of array is a column
+// for now matrices have to be square
 
 pub const Mat2 = [2]Vec2;
 pub const Mat3 = [3]Vec3;
@@ -25,7 +26,7 @@ test "add 2 vectors" {
     try std.testing.expectEqual(Vec3{ 3, 5, 4 }, res);
 }
 
-fn assertVectorType(comptime T: type) void {
+pub fn assertVectorType(comptime T: type) void {
     comptime switch (@typeInfo(T)) {
         .vector => |info| {
             if (info.child != f32) {
@@ -36,20 +37,20 @@ fn assertVectorType(comptime T: type) void {
     };
 }
 
-fn vecLanes(comptime T: type) comptime_int {
+pub fn vecLanes(comptime T: type) comptime_int {
     comptime assertVectorType(T);
 
     return @typeInfo(T).vector.len;
 }
 
-fn VecChild(comptime T: type) type {
+pub fn VecChild(comptime T: type) type {
     comptime assertVectorType(T);
 
     return @typeInfo(T).vector.child;
 }
 
 /// for now matrices have to be square
-fn assertMatrixType(comptime T: type) void {
+pub fn assertMatrixType(comptime T: type) void {
     comptime switch (@typeInfo(T)) {
         .array => |info| {
             assertVectorType(info.child);
@@ -62,7 +63,7 @@ fn assertMatrixType(comptime T: type) void {
     };
 }
 
-fn MatChild(comptime T: type) type {
+pub fn MatChild(comptime T: type) type {
     comptime assertMatrixType(T);
 
     return @typeInfo(T).array.child;

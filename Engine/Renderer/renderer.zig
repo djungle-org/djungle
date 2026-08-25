@@ -34,6 +34,12 @@ const Vertex = struct {
     col: lalg.Vec3,
 };
 
+const Matrices = struct {
+    model: lalg.Mat4,
+    view: lalg.Mat4,
+    proj: lalg.Mat4,
+};
+
 pub const Renderer = struct {
     _window: *win.Window,
     _swapchain_format: tex.TextureFormat,
@@ -239,6 +245,17 @@ pub const Renderer = struct {
         c.SDL_DrawGPUPrimitives(render_pass, 3, 1, 0, 0);
 
         c.SDL_EndGPURenderPass(render_pass);
+
+        const f_width: f32 = @floatFromInt(self._window.getWidth());
+        const f_height: f32 = @floatFromInt(self._window.getWidth());
+
+        const matrices = Matrices{
+            .model = lalg.translate(.{ 0, 0, 2 }),
+            .view = try lalg.lookAt(.{ 0, 1, -1 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
+            .proj = lalg.perspective(f_width / f_height, 60, 0.1, 100),
+        };
+
+        command_buffer.pushVertexUniformData(0, Matrices, &matrices);
 
         try command_buffer.submit();
     }

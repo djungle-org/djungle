@@ -70,7 +70,7 @@ pub const CommandBuffer = struct {
     }
 
     /// data must be in std140 layout conventions
-    pub fn pushVertexUniformData(self: *@This(), slot_idx: u32, comptime T: type, push_data: T) void {
-        c.SDL_PushGPUVertexUniformData(self.toSdl(), slot_idx, push_data, @sizeOf(T));
+    pub fn pushVertexUniformData(self: *@This(), slot_idx: u32, comptime T: type, push_data: *const T) void {
+        c.SDL_PushGPUVertexUniformData(self.toSdl(), slot_idx, @ptrCast(push_data), @sizeOf(T));
     }
 };
