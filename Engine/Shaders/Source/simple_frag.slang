@@ -1,4 +1,4 @@
-import simple_vert;
+import common;
 
 // Sampler2D texture;
 

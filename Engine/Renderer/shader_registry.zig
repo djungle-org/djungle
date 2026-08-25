@@ -13,11 +13,25 @@ pub const ShaderKind = enum {
     Fragment,
 };
 
+pub const DescriptorCounts = struct {
+    samplers: u32,
+    storage_buffers: u32,
+    storage_textures: u32,
+    uniform_buffers: u32,
+};
+
 pub const Shader = struct {
     _sdl_gpu_shader: *c.SDL_GPUShader,
     _kind: ShaderKind,
 
-    pub fn create(gpu_device: *GpuDevice, code_size: usize, code: []const u8, entrypoint_name: []const u8, shader_kind: ShaderKind) !@This() {
+    pub fn create(
+        gpu_device: *GpuDevice,
+        code_size: usize,
+        code: []const u8,
+        entrypoint_name: [:0]const u8,
+        shader_kind: ShaderKind,
+        descriptor_counts: DescriptorCounts,
+    ) !@This() {
         const shader_info = c.SDL_GPUShaderCreateInfo{
             .code_size = code_size,
             .code = @ptrCast(code),
@@ -27,10 +41,10 @@ pub const Shader = struct {
                 .Fragment => c.SDL_GPU_SHADERSTAGE_FRAGMENT,
             },
             .format = c.SDL_GPU_SHADERFORMAT_SPIRV,
-            .num_samplers = 0,
-            .num_storage_buffers = 0,
-            .num_storage_textures = 0,
-            .num_uniform_buffers = 0,
+            .num_samplers = descriptor_counts.samplers,
+            .num_storage_buffers = descriptor_counts.storage_buffers,
+            .num_storage_textures = descriptor_counts.storage_textures,
+            .num_uniform_buffers = descriptor_counts.uniform_buffers,
         };
 
         return .{

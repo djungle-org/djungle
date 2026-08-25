@@ -533,8 +533,8 @@ pub fn perspective(aspect_ratio: f32, fov: f32, near: f32, far: f32) Mat4 {
 
     const x_scale = 1 / (aspect_ratio * tan_half_fov);
     const y_scale = 1 / tan_half_fov;
-    const z_remap1 = -(far + near) / (far - near);
-    const z_remap2 = -(2 * far * near) / (far - near);
+    const z_remap1 = far / (near - far);
+    const z_remap2 = (far * near) / (near - far);
 
     return toColumns(Mat4, .{
         .{ x_scale, 0, 0, 0 },

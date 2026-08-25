@@ -1,8 +1,11 @@
+import common;
+
 struct Matrices {
   float4x4 model;
   float4x4 view;
   float4x4 proj;
 };
+[[vk_binding(0, 1)]]
 ConstantBuffer<Matrices> matrices;
 
 struct VSInput {
@@ -10,12 +13,6 @@ struct VSInput {
   float3 col;
   // float2 texCoord;
 };
-
-public struct VSOutput {
-  public float4 pos : SV_Position;
-  public float3 col;
-  // public float2 texCoord;
-}
 
 [shader("vertex")]
 VSOutput vertMain(VSInput input) {

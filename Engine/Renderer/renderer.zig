@@ -242,20 +242,20 @@ pub const Renderer = struct {
 
         c.SDL_BindGPUGraphicsPipeline(render_pass, self._graphics_pipeline);
 
-        c.SDL_DrawGPUPrimitives(render_pass, 3, 1, 0, 0);
-
-        c.SDL_EndGPURenderPass(render_pass);
-
         const f_width: f32 = @floatFromInt(self._window.getWidth());
         const f_height: f32 = @floatFromInt(self._window.getWidth());
 
         const matrices = Matrices{
-            .model = lalg.translate(.{ 0, 0, 2 }),
-            .view = try lalg.lookAt(.{ 0, 1, -1 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
-            .proj = lalg.perspective(f_width / f_height, 60, 0.1, 100),
+            .model = lalg.translate(.{ 0, 0, 5 }),
+            .view = try lalg.lookAt(.{ 0, 1, -1 }, .{ 0, 0, 5 }, .{ 0, 1, 0 }),
+            .proj = lalg.perspective(f_width / f_height, std.math.degreesToRadians(60), 0.1, 100),
         };
 
         command_buffer.pushVertexUniformData(0, Matrices, &matrices);
+
+        c.SDL_DrawGPUPrimitives(render_pass, 3, 1, 0, 0);
+
+        c.SDL_EndGPURenderPass(render_pass);
 
         try command_buffer.submit();
     }
@@ -274,23 +274,58 @@ pub const Renderer = struct {
 
         const ShaderBinary = struct {
             name: []const u8,
-            path: []const u8,
-            entry: [:0]const u8,
-            kind: ShaderKind,
+            json_path: []const u8,
+            binary_path: []const u8,
         };
 
         const binaries_zon_buf_0 = try arena.dupeSentinel(u8, binaries_zon_buf, 0);
         const binary_files = try std.zon.parse.fromSliceAlloc([]ShaderBinary, arena, binaries_zon_buf_0, null, .{});
 
         for (binary_files) |binary_file| {
-            const binary_buf = try spirv_bin_dir.readFileAlloc(io, binary_file.path, arena, .unlimited);
+            const binary_json = try spirv_bin_dir.readFileAlloc(io, binary_file.json_path, arena, .unlimited);
+
+            const parsed = try std.json.parseFromSlice(std.json.Value, arena, binary_json, .{});
+            defer parsed.deinit();
+
+            const entrypoint = parsed.value.object.get("entryPoints").?.array.items[0].object;
+            const entrypoint_name = entrypoint.get("name").?.string;
+            const stage_name = entrypoint.get("stage").?.string;
+
+            const stage: ShaderKind = if (std.mem.eql(u8, stage_name, "vertex"))
+                .Vertex
+            else if (std.mem.eql(u8, stage_name, "fragment"))
+                .Fragment
+            else
+                return error.InvalidShaderStage;
+
+            const parameters = parsed.value.object.get("parameters").?.array.items;
+
+            var descriptor_counts = reg.DescriptorCounts{
+                .samplers = 0,
+                .storage_buffers = 0,
+                .storage_textures = 0,
+                .uniform_buffers = 0,
+            };
+
+            for (parameters) |parameter| {
+                const kind = parameter.object.get("type").?.object.get("kind").?.string;
+
+                if (std.mem.eql(u8, kind, "constantBuffer")) {
+                    descriptor_counts.uniform_buffers += 1;
+                } else {
+                    return error.InvalidDescriptorKind;
+                }
+            }
+
+            const binary_buf = try spirv_bin_dir.readFileAlloc(io, binary_file.binary_path, arena, .unlimited);
 
             const shader = try Shader.create(
                 &self._gpu_device,
                 binary_buf.len * @sizeOf(u8),
                 binary_buf,
-                binary_file.entry,
-                binary_file.kind,
+                try arena.dupeSentinel(u8, entrypoint_name, 0),
+                stage,
+                descriptor_counts,
             );
 
             try self._shaders.put(binary_file.name, shader);

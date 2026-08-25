@@ -4,19 +4,18 @@ const ShaderCompilerError = error{
     ShaderCompileFailed,
 };
 
-const ShaderKind = enum {
-    Vertex,
-    Fragment,
-    Compute,
+const ShaderBinary = struct {
+    name: []const u8,
+    json_path: []const u8,
+    binary_path: []const u8,
 };
 
 const ShaderFile = struct {
     name: []const u8,
     path: []const u8,
     entry: []const u8,
-    kind: ShaderKind,
 
-    pub fn compile(self: @This(), allocator: std.mem.Allocator, io: std.Io, shader_source_path: []const u8, compiled_shaders_path: []const u8) ![]u8 {
+    pub fn compile(self: @This(), allocator: std.mem.Allocator, io: std.Io, shader_source_path: []const u8, compiled_shaders_path: []const u8) !ShaderBinary {
         const shader_absolute_path = try std.Io.Dir.path.join(allocator, &.{ shader_source_path, self.path });
 
         const binary_name = try std.mem.join(allocator, "", &.{ self.name, ".spv" });
@@ -56,7 +55,11 @@ const ShaderFile = struct {
             return ShaderCompilerError.ShaderCompileFailed;
         }
 
-        return binary_name;
+        return .{
+            .name = self.name,
+            .binary_path = try std.mem.join(allocator, "", &.{ self.name, ".spv" }),
+            .json_path = try std.mem.join(allocator, "", &.{ self.name, ".json" }),
+        };
     }
 };
 
@@ -77,9 +80,12 @@ pub fn main(init: std.process.Init) !void {
     const shaders_zon_buf_0 = try arena.dupeSentinel(u8, shaders_zon_buf, 0);
     const shader_files = try std.zon.parse.fromSliceAlloc([]ShaderFile, arena, shaders_zon_buf_0, null, .{});
 
+    var binary_files = try std.ArrayList(ShaderBinary).initCapacity(arena, shader_files.len);
+
     for (shader_files) |*shader_file| {
-        const binary_name = try shader_file.compile(arena, io, shader_src_path, compiled_shaders_path);
-        shader_file.path = binary_name;
+        const binary = try shader_file.compile(arena, io, shader_src_path, compiled_shaders_path);
+
+        try binary_files.append(arena, binary);
     }
 
     const binaries_zon_path = try std.Io.Dir.path.join(arena, &.{ compiled_shaders_path, "shader_binaries.zon" });
@@ -89,7 +95,7 @@ pub fn main(init: std.process.Init) !void {
     var writer = std.Io.Writer.Allocating.init(arena);
     defer writer.deinit();
 
-    try std.zon.stringify.serialize(shader_files, .{}, &writer.writer);
+    try std.zon.stringify.serialize(binary_files.items, .{}, &writer.writer);
 
     const zon_buf = writer.writer.buffered();
 
@@ -99,7 +105,7 @@ pub fn main(init: std.process.Init) !void {
 test "parses shader zon with correct fields" {
     const zon_text: []const u8 =
         \\.{
-        \\    .{ .name = "simple_frag", .path = "simple_frag.slang", .entry = "fragMain", .kind = .Fragment },
+        \\    .{ .name = "simple_frag", .path = "simple_frag.slang", .entry = "fragMain", },
         \\}
     ;
 
@@ -111,5 +117,4 @@ test "parses shader zon with correct fields" {
 
     try std.testing.expectEqual(1, parsed.len);
     try std.testing.expectEqualStrings("simple_frag", parsed[0].name);
-    try std.testing.expectEqual(ShaderKind.Fragment, parsed[0].kind);
 }
