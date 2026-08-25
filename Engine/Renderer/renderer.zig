@@ -246,8 +246,8 @@ pub const Renderer = struct {
         const f_height: f32 = @floatFromInt(self._window.getHeight());
 
         const matrices = Matrices{
-            .model = lalg.translate(.{ 0, 0, 5 }),
-            .view = try lalg.lookAt(.{ 0, 1, -1 }, .{ 0, 0, 5 }, .{ 0, 1, 0 }),
+            .model = lalg.translate(.{ 0, 0, 3 }),
+            .view = try lalg.lookAt(.{ 0, 2, 2 }, .{ 0, 0, 3 }, .{ 0, 1, 0 }),
             .proj = lalg.perspective(f_width / f_height, std.math.degreesToRadians(60), 0.1, 100),
         };
 
