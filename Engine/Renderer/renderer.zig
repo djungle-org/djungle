@@ -205,7 +205,7 @@ pub const Renderer = struct {
 
         const depth_stencil_target_info = c.SDL_GPUDepthStencilTargetInfo{
             .texture = self._depth_tex.toSdl(),
-            .clear_depth = 0, // can be ignored if loadop isnt clear
+            .clear_depth = 1, // can be ignored if loadop isnt clear
             .load_op = c.SDL_GPU_LOADOP_CLEAR,
             .store_op = c.SDL_GPU_STOREOP_STORE,
             .stencil_load_op = c.SDL_GPU_LOADOP_DONT_CARE,
@@ -243,7 +243,7 @@ pub const Renderer = struct {
         c.SDL_BindGPUGraphicsPipeline(render_pass, self._graphics_pipeline);
 
         const f_width: f32 = @floatFromInt(self._window.getWidth());
-        const f_height: f32 = @floatFromInt(self._window.getWidth());
+        const f_height: f32 = @floatFromInt(self._window.getHeight());
 
         const matrices = Matrices{
             .model = lalg.translate(.{ 0, 0, 5 }),
