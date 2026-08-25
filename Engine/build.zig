@@ -4,6 +4,12 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const shader_tools_module = b.addModule("ShaderTools", .{
+        .root_source_file = b.path("Shaders/shader_tools.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // shader compiler executable
 
     const shader_compiler = b.addExecutable(.{
@@ -15,6 +21,8 @@ pub fn build(b: *std.Build) !void {
             .link_libc = true,
         }),
     });
+
+    shader_compiler.root_module.addImport("ShaderTools", shader_tools_module);
 
     b.installArtifact(shader_compiler);
 
@@ -92,6 +100,7 @@ pub fn build(b: *std.Build) !void {
     renderer_module.addImport("Lalg", lalg_module);
     renderer_module.addImport("DeletionQueue", deletion_queue_module);
     renderer_module.addImport("Window", window_module);
+    renderer_module.addImport("ShaderTools", shader_tools_module);
 
     const engine_module = b.addModule("Engine", .{
         .root_source_file = b.path("engine.zig"),

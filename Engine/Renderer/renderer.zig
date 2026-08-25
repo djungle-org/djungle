@@ -10,6 +10,7 @@ const tex = @import("textures.zig");
 const dev = @import("gpu_device.zig");
 const cmd = @import("command_buffer.zig");
 const lalg = @import("Lalg");
+const st = @import("ShaderTools");
 
 const sdlCheck = @import("C").sdlCheck;
 const sdlCheckBool = @import("C").sdlCheckBool;
@@ -187,7 +188,7 @@ pub const Renderer = struct {
         self._gpu_device.deinit();
     }
 
-    pub fn render(self: *@This()) !void {
+    pub fn render(self: *@This(), io: std.Io) !void {
         var command_buffer = try cmd.CommandBuffer.acquire(&self._gpu_device);
 
         var swapchain_tex = try command_buffer.waitAndAcquireSwapchainTexture(&self._gpu_device, self._window);
@@ -245,9 +246,12 @@ pub const Renderer = struct {
         const f_width: f32 = @floatFromInt(self._window.getWidth());
         const f_height: f32 = @floatFromInt(self._window.getHeight());
 
+        const time = std.Io.Clock.awake.now(io);
+        const seconds: f32 = @floatFromInt(time.toMilliseconds());
+
         const matrices = Matrices{
-            .model = lalg.translate(.{ 0, 0, 3 }),
-            .view = try lalg.lookAt(.{ 0, 2, 2 }, .{ 0, 0, 3 }, .{ 0, 1, 0 }),
+            .model = lalg.translate(.{ @sin(seconds / 400), 0, @cos(seconds / 400) + 2 }),
+            .view = try lalg.lookAt(.{ 0, 0.5, 1.5 }, .{ 0, 0, 5 }, .{ 0, 1, 0 }),
             .proj = lalg.perspective(f_width / f_height, std.math.degreesToRadians(60), 0.1, 100),
         };
 
@@ -272,14 +276,8 @@ pub const Renderer = struct {
 
         const binaries_zon_buf = try spirv_bin_dir.readFileAlloc(io, "shader_binaries.zon", arena, .unlimited);
 
-        const ShaderBinary = struct {
-            name: []const u8,
-            json_path: []const u8,
-            binary_path: []const u8,
-        };
-
         const binaries_zon_buf_0 = try arena.dupeSentinel(u8, binaries_zon_buf, 0);
-        const binary_files = try std.zon.parse.fromSliceAlloc([]ShaderBinary, arena, binaries_zon_buf_0, null, .{});
+        const binary_files = try std.zon.parse.fromSliceAlloc([]st.ShaderBinary, arena, binaries_zon_buf_0, null, .{});
 
         for (binary_files) |binary_file| {
             const binary_json = try spirv_bin_dir.readFileAlloc(io, binary_file.json_path, arena, .unlimited);
