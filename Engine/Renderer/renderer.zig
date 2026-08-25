@@ -48,6 +48,8 @@ pub const Renderer = struct {
     _depth_tex: tex.Texture,
     _vertex_buffer: buf.Buffer,
     _vertex_buf_binding: c.SDL_GPUBufferBinding,
+    _idx_buffer: buf.Buffer,
+    _idx_buf_binding: c.SDL_GPUBufferBinding,
     _graphics_pipeline: *c.SDL_GPUGraphicsPipeline,
     _shaders: ShaderRegistry,
 
@@ -61,12 +63,7 @@ pub const Renderer = struct {
         self._shaders = try ShaderRegistry.init(gpa);
         try self.loadShaders(io, gpa, spirv_bin_dir_path);
 
-        try self.uploadToVertexBuffer();
-
-        self._vertex_buf_binding = c.SDL_GPUBufferBinding{
-            .buffer = self._vertex_buffer.toSdl(),
-            .offset = 0,
-        };
+        try self.uploadToVertexAndIdxBuffer();
 
         const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
             .slot = 0,
@@ -183,6 +180,8 @@ pub const Renderer = struct {
 
         self._vertex_buffer.deinit(&self._gpu_device);
 
+        self._idx_buffer.deinit(&self._gpu_device);
+
         self._shaders.deinit(&self._gpu_device);
 
         self._gpu_device.deinit();
@@ -230,6 +229,7 @@ pub const Renderer = struct {
         );
 
         c.SDL_BindGPUVertexBuffers(render_pass, 0, &self._vertex_buf_binding, 1);
+        c.SDL_BindGPUIndexBuffer(render_pass, &self._idx_buf_binding, c.SDL_GPU_INDEXELEMENTSIZE_32BIT);
 
         const viewport = c.SDL_GPUViewport{
             .x = 0,
@@ -257,7 +257,8 @@ pub const Renderer = struct {
 
         command_buffer.pushVertexUniformData(0, Matrices, &matrices);
 
-        c.SDL_DrawGPUPrimitives(render_pass, 3, 1, 0, 0);
+        // c.SDL_DrawGPUPrimitives(render_pass, 3, 1, 0, 0);
+        c.SDL_DrawGPUIndexedPrimitives(render_pass, 6, 1, 0, 0, 0);
 
         c.SDL_EndGPURenderPass(render_pass);
 
@@ -330,20 +331,26 @@ pub const Renderer = struct {
         }
     }
 
-    fn uploadToVertexBuffer(self: *@This()) !void {
+    fn uploadToVertexAndIdxBuffer(self: *@This()) !void {
         var command_buffer = try cmd.CommandBuffer.acquire(&self._gpu_device);
 
         const vertices = [_]Vertex{
             .{ .pos = .{ -0.5, -0.5 }, .col = .{ 1.0, 0.0, 0.0 } },
             .{ .pos = .{ 0.5, -0.5 }, .col = .{ 0.0, 1.0, 0.0 } },
-            .{ .pos = .{ 0, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
+            .{ .pos = .{ 0.5, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
+            .{ .pos = .{ -0.5, 0.5 }, .col = .{ 0.33, 0.33, 0.33 } },
         };
 
-        const buf_size = @sizeOf(@TypeOf(vertices));
+        const indices = [_]u32{
+            0, 1, 2,
+            2, 3, 0,
+        };
 
-        self._vertex_buffer = try buf.Buffer.create(&self._gpu_device, .Vertex, buf_size);
+        const vert_buf_size = @sizeOf(@TypeOf(vertices));
 
-        var transfer_buffer = try buf.transfer.Upload.create(&self._gpu_device, buf_size);
+        self._vertex_buffer = try buf.Buffer.create(&self._gpu_device, .Vertex, vert_buf_size);
+
+        var transfer_buffer = try buf.transfer.Upload.create(&self._gpu_device, vert_buf_size);
         defer transfer_buffer.deinit(&self._gpu_device);
 
         try transfer_buffer.upload(&self._gpu_device, Vertex, &vertices);
@@ -352,8 +359,32 @@ pub const Renderer = struct {
 
         try self._vertex_buffer.upload(copy_pass, transfer_buffer, 0, .{
             .offset = 0,
-            .size = buf_size,
+            .size = vert_buf_size,
         });
+
+        self._vertex_buf_binding = c.SDL_GPUBufferBinding{
+            .buffer = self._vertex_buffer.toSdl(),
+            .offset = 0,
+        };
+
+        const idx_buf_size = @sizeOf(@TypeOf(indices));
+
+        self._idx_buffer = try buf.Buffer.create(&self._gpu_device, .Index, idx_buf_size);
+
+        var idx_transfer_buf = try buf.transfer.Upload.create(&self._gpu_device, idx_buf_size);
+        defer idx_transfer_buf.deinit(&self._gpu_device);
+
+        try idx_transfer_buf.upload(&self._gpu_device, u32, &indices);
+
+        try self._idx_buffer.upload(copy_pass, idx_transfer_buf, 0, .{
+            .offset = 0,
+            .size = idx_buf_size,
+        });
+
+        self._idx_buf_binding = c.SDL_GPUBufferBinding{
+            .buffer = self._idx_buffer.toSdl(),
+            .offset = 0,
+        };
 
         c.SDL_EndGPUCopyPass(copy_pass);
 
