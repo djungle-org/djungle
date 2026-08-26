@@ -32,11 +32,6 @@ pub const RendererError = error{
     FailedToAcquireSwapchainTexture,
 };
 
-const Vertex = struct {
-    pos: la.Vec3,
-    col: la.Vec3,
-};
-
 const Matrices = struct {
     model: la.Mat4,
     view: la.Mat4,
@@ -62,76 +57,12 @@ pub const Renderer = struct {
         self._shaders = try ShaderRegistry.init(gpa);
         try self.loadShaders(io, gpa, spirv_bin_dir_path);
 
-        const vertices = [_]Vertex{
-            // top
-            .{ .pos = .{ -0.5, 0.5, -0.5 }, .col = .{ 1.0, 1.0, 1.0 } },
-            .{ .pos = .{ -0.5, 0.5, 0.5 }, .col = .{ 1.0, 1.0, 1.0 } },
-            .{ .pos = .{ 0.5, 0.5, 0.5 }, .col = .{ 1.0, 1.0, 1.0 } },
-            .{ .pos = .{ 0.5, 0.5, -0.5 }, .col = .{ 1.0, 1.0, 1.0 } },
-
-            // bottom
-            .{ .pos = .{ -0.5, -0.5, -0.5 }, .col = .{ 1.0, 0.8, 0.0 } },
-            .{ .pos = .{ 0.5, -0.5, -0.5 }, .col = .{ 1.0, 0.8, 0.0 } },
-            .{ .pos = .{ 0.5, -0.5, 0.5 }, .col = .{ 1.0, 0.8, 0.0 } },
-            .{ .pos = .{ -0.5, -0.5, 0.5 }, .col = .{ 1.0, 0.8, 0.0 } },
-
-            // left
-            .{ .pos = .{ -0.5, -0.5, 0.5 }, .col = .{ 1.0, 0.3, 0.0 } },
-            .{ .pos = .{ -0.5, 0.5, 0.5 }, .col = .{ 1.0, 0.3, 0.0 } },
-            .{ .pos = .{ -0.5, 0.5, -0.5 }, .col = .{ 1.0, 0.3, 0.0 } },
-            .{ .pos = .{ -0.5, -0.5, -0.5 }, .col = .{ 1.0, 0.3, 0.0 } },
-
-            // right
-            .{ .pos = .{ 0.5, -0.5, -0.5 }, .col = .{ 0.8, 0.0, 0.0 } },
-            .{ .pos = .{ 0.5, 0.5, -0.5 }, .col = .{ 0.8, 0.0, 0.0 } },
-            .{ .pos = .{ 0.5, 0.5, 0.5 }, .col = .{ 0.8, 0.0, 0.0 } },
-            .{ .pos = .{ 0.5, -0.5, 0.5 }, .col = .{ 0.8, 0.0, 0.0 } },
-
-            // front
-            .{ .pos = .{ -0.5, -0.5, 0.5 }, .col = .{ 0.0, 0.6, 0.3 } },
-            .{ .pos = .{ 0.5, -0.5, 0.5 }, .col = .{ 0.0, 0.6, 0.3 } },
-            .{ .pos = .{ 0.5, 0.5, 0.5 }, .col = .{ 0.0, 0.6, 0.3 } },
-            .{ .pos = .{ -0.5, 0.5, 0.5 }, .col = .{ 0.0, 0.6, 0.3 } },
-
-            // back
-            .{ .pos = .{ 0.5, -0.5, -0.5 }, .col = .{ 0.0, 0.3, 0.7 } },
-            .{ .pos = .{ -0.5, -0.5, -0.5 }, .col = .{ 0.0, 0.3, 0.7 } },
-            .{ .pos = .{ -0.5, 0.5, -0.5 }, .col = .{ 0.0, 0.3, 0.7 } },
-            .{ .pos = .{ 0.5, 0.5, -0.5 }, .col = .{ 0.0, 0.3, 0.7 } },
-        };
-
-        const indices = [_]u32{
-            // top
-            0,  1,  2,
-            2,  3,  0,
-
-            // bottom
-            4,  5,  6,
-            6,  7,  4,
-
-            // left
-            8,  9,  10,
-            10, 11, 8,
-
-            // right
-            12, 13, 14,
-            14, 15, 12,
-
-            // front
-            16, 17, 18,
-            18, 19, 16,
-
-            // back
-            20, 21, 22,
-            22, 23, 20,
-        };
-
         self._object = undefined;
-        try self._object.init(&self._gpu_device, Vertex, &vertices, &indices);
+        try self._object.init(&self._gpu_device, &mesh.cube_vertices, &mesh.cube_indices);
 
         const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
             .slot = 0,
-            .pitch = @sizeOf(Vertex),
+            .pitch = @sizeOf(mesh.Vertex),
             .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
         };
 
@@ -316,7 +247,7 @@ pub const Renderer = struct {
                 la.translate(.{ @sin(now / 400), 0, @cos(now / 400) + 2 }),
                 try la.rotate(.{ 0, 1, 0 }, now / 400),
             ),
-            .view = try la.lookAt(.{ 0, 1, -2 }, .{ 0, 0, 5 }, .{ 0, 1, 0 }),
+            .view = try la.lookAt(.{ 0, 2, -3 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
             .proj = la.perspective(f_width / f_height, std.math.degreesToRadians(60), 0.1, 100),
         };
 

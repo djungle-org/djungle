@@ -6,6 +6,11 @@ const dev = @import("gpu_device.zig");
 const cmd = @import("command_buffer.zig");
 const la = @import("Lalg");
 
+pub const Vertex = struct {
+    pos: la.Vec3,
+    col: la.Vec3,
+};
+
 pub const Mesh = struct {
     _vertex_buffer: buf.Buffer,
     _index_buffer: buf.Buffer,
@@ -15,7 +20,7 @@ pub const Mesh = struct {
 
     _index_count: u32,
 
-    pub fn init(self: *@This(), gpu_device: *dev.GpuDevice, comptime Vertex: type, vertices: []const Vertex, indices: []const u32) !void {
+    pub fn init(self: *@This(), gpu_device: *dev.GpuDevice, vertices: []const Vertex, indices: []const u32) !void {
         self._index_count = @intCast(indices.len);
 
         var cmd_buf = try cmd.CommandBuffer.acquire(gpu_device);
@@ -81,15 +86,91 @@ pub const Mesh = struct {
     }
 };
 
+// cube
+pub const cube_vertices = [_]Vertex{
+    // top
+    .{ .pos = .{ -0.5, 0.5, -0.5 }, .col = .{ 1.0, 1.0, 1.0 } },
+    .{ .pos = .{ -0.5, 0.5, 0.5 }, .col = .{ 1.0, 1.0, 1.0 } },
+    .{ .pos = .{ 0.5, 0.5, 0.5 }, .col = .{ 1.0, 1.0, 1.0 } },
+    .{ .pos = .{ 0.5, 0.5, -0.5 }, .col = .{ 1.0, 1.0, 1.0 } },
+
+    // bottom
+    .{ .pos = .{ -0.5, -0.5, -0.5 }, .col = .{ 1.0, 0.8, 0.0 } },
+    .{ .pos = .{ 0.5, -0.5, -0.5 }, .col = .{ 1.0, 0.8, 0.0 } },
+    .{ .pos = .{ 0.5, -0.5, 0.5 }, .col = .{ 1.0, 0.8, 0.0 } },
+    .{ .pos = .{ -0.5, -0.5, 0.5 }, .col = .{ 1.0, 0.8, 0.0 } },
+
+    // left
+    .{ .pos = .{ -0.5, -0.5, 0.5 }, .col = .{ 1.0, 0.3, 0.0 } },
+    .{ .pos = .{ -0.5, 0.5, 0.5 }, .col = .{ 1.0, 0.3, 0.0 } },
+    .{ .pos = .{ -0.5, 0.5, -0.5 }, .col = .{ 1.0, 0.3, 0.0 } },
+    .{ .pos = .{ -0.5, -0.5, -0.5 }, .col = .{ 1.0, 0.3, 0.0 } },
+
+    // right
+    .{ .pos = .{ 0.5, -0.5, -0.5 }, .col = .{ 0.8, 0.0, 0.0 } },
+    .{ .pos = .{ 0.5, 0.5, -0.5 }, .col = .{ 0.8, 0.0, 0.0 } },
+    .{ .pos = .{ 0.5, 0.5, 0.5 }, .col = .{ 0.8, 0.0, 0.0 } },
+    .{ .pos = .{ 0.5, -0.5, 0.5 }, .col = .{ 0.8, 0.0, 0.0 } },
+
+    // front
+    .{ .pos = .{ -0.5, -0.5, 0.5 }, .col = .{ 0.0, 0.6, 0.3 } },
+    .{ .pos = .{ 0.5, -0.5, 0.5 }, .col = .{ 0.0, 0.6, 0.3 } },
+    .{ .pos = .{ 0.5, 0.5, 0.5 }, .col = .{ 0.0, 0.6, 0.3 } },
+    .{ .pos = .{ -0.5, 0.5, 0.5 }, .col = .{ 0.0, 0.6, 0.3 } },
+
+    // back
+    .{ .pos = .{ 0.5, -0.5, -0.5 }, .col = .{ 0.0, 0.3, 0.7 } },
+    .{ .pos = .{ -0.5, -0.5, -0.5 }, .col = .{ 0.0, 0.3, 0.7 } },
+    .{ .pos = .{ -0.5, 0.5, -0.5 }, .col = .{ 0.0, 0.3, 0.7 } },
+    .{ .pos = .{ 0.5, 0.5, -0.5 }, .col = .{ 0.0, 0.3, 0.7 } },
+};
+
+pub const cube_indices = [_]u32{
+    // top
+    0,  1,  2,
+    2,  3,  0,
+
+    // bottom
+    4,  5,  6,
+    6,  7,  4,
+
+    // left
+    8,  9,  10,
+    10, 11, 8,
+
+    // right
+    12, 13, 14,
+    14, 15, 12,
+
+    // front
+    16, 17, 18,
+    18, 19, 16,
+
+    // back
+    20, 21, 22,
+    22, 23, 20,
+};
+
 // quad
-// const vertices = [_]Vertex{
-//     .{ .pos = .{ -0.5, -0.5 }, .col = .{ 1.0, 0.0, 0.0 } },
-//     .{ .pos = .{ 0.5, -0.5 }, .col = .{ 0.0, 1.0, 0.0 } },
-//     .{ .pos = .{ 0.5, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
-//     .{ .pos = .{ -0.5, 0.5 }, .col = .{ 0.33, 0.33, 0.33 } },
-// };
-//
-// const indices = [_]u32{
-//     0, 1, 2,
-//     2, 3, 0,
-// };
+const quad_vertices = [_]Vertex{
+    .{ .pos = .{ -0.5, -0.5 }, .col = .{ 1.0, 0.0, 0.0 } },
+    .{ .pos = .{ 0.5, -0.5 }, .col = .{ 0.0, 1.0, 0.0 } },
+    .{ .pos = .{ 0.5, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
+    .{ .pos = .{ -0.5, 0.5 }, .col = .{ 0.33, 0.33, 0.33 } },
+};
+
+const quad_indices = [_]u32{
+    0, 1, 2,
+    2, 3, 0,
+};
+
+// triangle
+const triangle_vertices = [_]Vertex{
+    .{ .pos = .{ -0.5, -0.5 }, .col = .{ 1.0, 0.0, 0.0 } },
+    .{ .pos = .{ 0.5, -0.5 }, .col = .{ 0.0, 1.0, 0.0 } },
+    .{ .pos = .{ 0.5, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
+};
+
+const triangle_indices = [_]u32{
+    0, 1, 2,
+};
