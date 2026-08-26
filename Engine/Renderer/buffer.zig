@@ -27,7 +27,9 @@ pub const Region = struct {
 pub const Buffer = struct {
     _sdl_buffer: *c.SDL_GPUBuffer,
 
-    pub fn create(gpu_device: *GpuDevice, usage: BufferUsage, size: usize) !@This() {
+    _size: usize,
+
+    pub fn init(gpu_device: *GpuDevice, usage: BufferUsage, size: usize) !@This() {
         const sdl_buf_usage: u32 = switch (usage) {
             .Vertex => c.SDL_GPU_BUFFERUSAGE_VERTEX,
             .Index => c.SDL_GPU_BUFFERUSAGE_INDEX,
@@ -49,6 +51,7 @@ pub const Buffer = struct {
                 c.SDL_CreateGPUBuffer(gpu_device.toSdl(), &gpu_buf_info),
                 BufferError.FailedToCreateGpuBuffer,
             ),
+            ._size = size,
         };
     }
 
@@ -71,6 +74,10 @@ pub const Buffer = struct {
         c.SDL_UploadToGPUBuffer(copy_pass, &transfer_buffer_loc, &sdl_buffer_region, true);
     }
 
+    pub fn getSize(self: @This()) void {
+        return self._size;
+    }
+
     pub fn toSdl(self: *@This()) *c.SDL_GPUBuffer {
         return self._sdl_buffer;
     }
@@ -80,7 +87,7 @@ pub const transfer = struct {
     pub const Upload = struct {
         _sdl_transfer_buffer: *c.SDL_GPUTransferBuffer,
 
-        pub fn create(gpu_device: *GpuDevice, size: usize) !@This() {
+        pub fn init(gpu_device: *GpuDevice, size: usize) !@This() {
             const transer_buf_info = c.SDL_GPUTransferBufferCreateInfo{
                 .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
                 .size = @intCast(size),

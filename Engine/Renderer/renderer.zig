@@ -3,14 +3,16 @@ const c = @import("C").c;
 const win = @import("Window");
 const log = @import("Logging");
 const vk = @import("Vulkan");
+const la = @import("Lalg");
+const st = @import("ShaderTools");
+
 const t = @import("types.zig");
 const reg = @import("shader_registry.zig");
 const buf = @import("buffer.zig");
 const tex = @import("textures.zig");
 const dev = @import("gpu_device.zig");
 const cmd = @import("command_buffer.zig");
-const lalg = @import("Lalg");
-const st = @import("ShaderTools");
+const mesh = @import("mesh.zig");
 
 const sdlCheck = @import("C").sdlCheck;
 const sdlCheckBool = @import("C").sdlCheckBool;
@@ -31,14 +33,14 @@ pub const RendererError = error{
 };
 
 const Vertex = struct {
-    pos: lalg.Vec2,
-    col: lalg.Vec3,
+    pos: la.Vec2,
+    col: la.Vec3,
 };
 
 const Matrices = struct {
-    model: lalg.Mat4,
-    view: lalg.Mat4,
-    proj: lalg.Mat4,
+    model: la.Mat4,
+    view: la.Mat4,
+    proj: la.Mat4,
 };
 
 pub const Renderer = struct {
@@ -46,10 +48,7 @@ pub const Renderer = struct {
     _swapchain_format: tex.TextureFormat,
     _gpu_device: dev.GpuDevice,
     _depth_tex: tex.Texture,
-    _vertex_buffer: buf.Buffer,
-    _vertex_buf_binding: c.SDL_GPUBufferBinding,
-    _idx_buffer: buf.Buffer,
-    _idx_buf_binding: c.SDL_GPUBufferBinding,
+    _object: mesh.Mesh,
     _graphics_pipeline: *c.SDL_GPUGraphicsPipeline,
     _shaders: ShaderRegistry,
 
@@ -63,7 +62,20 @@ pub const Renderer = struct {
         self._shaders = try ShaderRegistry.init(gpa);
         try self.loadShaders(io, gpa, spirv_bin_dir_path);
 
-        try self.uploadToVertexAndIdxBuffer();
+        const vertices = [_]Vertex{
+            .{ .pos = .{ -0.5, -0.5 }, .col = .{ 1.0, 0.0, 0.0 } },
+            .{ .pos = .{ 0.5, -0.5 }, .col = .{ 0.0, 1.0, 0.0 } },
+            .{ .pos = .{ 0.5, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
+            .{ .pos = .{ -0.5, 0.5 }, .col = .{ 0.33, 0.33, 0.33 } },
+        };
+
+        const indices = [_]u32{
+            0, 1, 2,
+            2, 3, 0,
+        };
+
+        self._object = undefined;
+        try self._object.init(&self._gpu_device, Vertex, &vertices, &indices);
 
         const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
             .slot = 0,
@@ -82,11 +94,11 @@ pub const Renderer = struct {
                 .location = 1,
                 .buffer_slot = 0,
                 .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-                .offset = @sizeOf(lalg.Vec2),
+                .offset = @sizeOf(la.Vec2),
             },
         };
 
-        self._depth_tex = try tex.Texture.create(
+        self._depth_tex = try tex.Texture.init(
             &self._gpu_device,
             ._2d,
             .D32_Float,
@@ -178,9 +190,7 @@ pub const Renderer = struct {
 
         self._depth_tex.deinit(&self._gpu_device);
 
-        self._vertex_buffer.deinit(&self._gpu_device);
-
-        self._idx_buffer.deinit(&self._gpu_device);
+        self._object.deinit(&self._gpu_device);
 
         self._shaders.deinit(&self._gpu_device);
 
@@ -228,8 +238,7 @@ pub const Renderer = struct {
             RendererError.FailedToBeginRenderPass,
         );
 
-        c.SDL_BindGPUVertexBuffers(render_pass, 0, &self._vertex_buf_binding, 1);
-        c.SDL_BindGPUIndexBuffer(render_pass, &self._idx_buf_binding, c.SDL_GPU_INDEXELEMENTSIZE_32BIT);
+        self._object.bind(render_pass);
 
         const viewport = c.SDL_GPUViewport{
             .x = 0,
@@ -250,9 +259,9 @@ pub const Renderer = struct {
         const seconds: f32 = @floatFromInt(time.toMilliseconds());
 
         const matrices = Matrices{
-            .model = lalg.translate(.{ @sin(seconds / 400), 0, @cos(seconds / 400) + 2 }),
-            .view = try lalg.lookAt(.{ 0, 0.5, 1.5 }, .{ 0, 0, 5 }, .{ 0, 1, 0 }),
-            .proj = lalg.perspective(f_width / f_height, std.math.degreesToRadians(60), 0.1, 100),
+            .model = la.translate(.{ @sin(seconds / 400), 0, @cos(seconds / 400) + 2 }),
+            .view = try la.lookAt(.{ 0, 0.5, 1.5 }, .{ 0, 0, 5 }, .{ 0, 1, 0 }),
+            .proj = la.perspective(f_width / f_height, std.math.degreesToRadians(60), 0.1, 100),
         };
 
         command_buffer.pushVertexUniformData(0, Matrices, &matrices);
@@ -318,7 +327,7 @@ pub const Renderer = struct {
 
             const binary_buf = try spirv_bin_dir.readFileAlloc(io, binary_file.binary_path, arena, .unlimited);
 
-            const shader = try Shader.create(
+            const shader = try Shader.init(
                 &self._gpu_device,
                 binary_buf.len * @sizeOf(u8),
                 binary_buf,
@@ -329,65 +338,5 @@ pub const Renderer = struct {
 
             try self._shaders.put(binary_file.name, shader);
         }
-    }
-
-    fn uploadToVertexAndIdxBuffer(self: *@This()) !void {
-        var command_buffer = try cmd.CommandBuffer.acquire(&self._gpu_device);
-
-        const vertices = [_]Vertex{
-            .{ .pos = .{ -0.5, -0.5 }, .col = .{ 1.0, 0.0, 0.0 } },
-            .{ .pos = .{ 0.5, -0.5 }, .col = .{ 0.0, 1.0, 0.0 } },
-            .{ .pos = .{ 0.5, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
-            .{ .pos = .{ -0.5, 0.5 }, .col = .{ 0.33, 0.33, 0.33 } },
-        };
-
-        const indices = [_]u32{
-            0, 1, 2,
-            2, 3, 0,
-        };
-
-        const vert_buf_size = @sizeOf(@TypeOf(vertices));
-
-        self._vertex_buffer = try buf.Buffer.create(&self._gpu_device, .Vertex, vert_buf_size);
-
-        var transfer_buffer = try buf.transfer.Upload.create(&self._gpu_device, vert_buf_size);
-        defer transfer_buffer.deinit(&self._gpu_device);
-
-        try transfer_buffer.upload(&self._gpu_device, Vertex, &vertices);
-
-        const copy_pass = try command_buffer.beginCopyPass();
-
-        try self._vertex_buffer.upload(copy_pass, transfer_buffer, 0, .{
-            .offset = 0,
-            .size = vert_buf_size,
-        });
-
-        self._vertex_buf_binding = c.SDL_GPUBufferBinding{
-            .buffer = self._vertex_buffer.toSdl(),
-            .offset = 0,
-        };
-
-        const idx_buf_size = @sizeOf(@TypeOf(indices));
-
-        self._idx_buffer = try buf.Buffer.create(&self._gpu_device, .Index, idx_buf_size);
-
-        var idx_transfer_buf = try buf.transfer.Upload.create(&self._gpu_device, idx_buf_size);
-        defer idx_transfer_buf.deinit(&self._gpu_device);
-
-        try idx_transfer_buf.upload(&self._gpu_device, u32, &indices);
-
-        try self._idx_buffer.upload(copy_pass, idx_transfer_buf, 0, .{
-            .offset = 0,
-            .size = idx_buf_size,
-        });
-
-        self._idx_buf_binding = c.SDL_GPUBufferBinding{
-            .buffer = self._idx_buffer.toSdl(),
-            .offset = 0,
-        };
-
-        c.SDL_EndGPUCopyPass(copy_pass);
-
-        try command_buffer.submit();
     }
 };

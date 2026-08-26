@@ -24,7 +24,7 @@ pub const Shader = struct {
     _sdl_gpu_shader: *c.SDL_GPUShader,
     _kind: ShaderKind,
 
-    pub fn create(
+    pub fn init(
         gpu_device: *GpuDevice,
         code_size: usize,
         code: []const u8,

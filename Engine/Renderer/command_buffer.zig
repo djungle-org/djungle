@@ -66,7 +66,7 @@ pub const CommandBuffer = struct {
         const texture = swapchain_tex orelse return CommandBufferError.FailedToAcquireSwapchainTexture;
 
         const format = try gpu_device.getSwapchainFormat(window);
-        return tex.SwapchainTexture.create(texture, format, swapchain_tex_width, swapchain_tex_height);
+        return tex.SwapchainTexture.init(texture, format, swapchain_tex_width, swapchain_tex_height);
     }
 
     /// data must be in std140 layout conventions

@@ -94,7 +94,7 @@ pub const Texture = struct {
     height: u32,
 
     /// sampler + graphics_storage_read or compute_storage_read is invalid and will return an error
-    pub fn create(
+    pub fn init(
         gpu_device: *GpuDevice,
         tex_type: TextureType,
         format: TextureFormat,
@@ -160,7 +160,7 @@ pub const SwapchainTexture = struct {
     width: u32,
     height: u32,
 
-    pub fn create(
+    pub fn init(
         sdl_texture: *c.SDL_GPUTexture,
         format: TextureFormat,
         width: u32,
