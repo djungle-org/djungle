@@ -6,7 +6,6 @@ const vk = @import("Vulkan");
 const la = @import("Lalg");
 const st = @import("ShaderTools");
 
-const t = @import("types.zig");
 const reg = @import("shader_registry.zig");
 const buf = @import("buffer.zig");
 const tex = @import("textures.zig");
@@ -129,7 +128,7 @@ pub const Renderer = struct {
                 .enable_depth_clip = true,
             },
             .multisample_state = .{
-                .sample_count = t.SampleCount.toSdl(._1),
+                .sample_count = tex.SampleCount.toSdl(._1),
                 .enable_alpha_to_coverage = false,
             },
             .depth_stencil_state = .{

@@ -1,6 +1,5 @@
 const std = @import("std");
 const c = @import("C").c;
-const types = @import("types.zig");
 const log = @import("Logging");
 
 const sdlCheck = @import("C").sdlCheck;
@@ -10,6 +9,22 @@ pub const TextureError = error{
     FailedToCreateGpuTexture,
     InvalidTextureUsageCombination,
     UnknownTextureFormat,
+};
+
+pub const SampleCount = enum {
+    _1,
+    _2,
+    _4,
+    _8,
+
+    pub fn toSdl(self: @This()) c_uint {
+        return switch (self) {
+            ._1 => c.SDL_GPU_SAMPLECOUNT_1,
+            ._2 => c.SDL_GPU_SAMPLECOUNT_2,
+            ._4 => c.SDL_GPU_SAMPLECOUNT_4,
+            ._8 => c.SDL_GPU_SAMPLECOUNT_8,
+        };
+    }
 };
 
 pub const TextureType = enum {
@@ -101,7 +116,7 @@ pub const Texture = struct {
         usage: TextureUsage,
         width: u32,
         height: u32,
-        sample_count: types.SampleCount,
+        sample_count: SampleCount,
     ) !@This() {
         if (usage.sampler and (usage.graphics_storage_read or usage.compute_storage_read)) {
             return TextureError.InvalidTextureUsageCombination;
