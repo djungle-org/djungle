@@ -99,7 +99,8 @@ pub const TextureUsage = packed struct {
 };
 
 pub const Texture = struct {
-    _sdl_texture: *c.SDL_GPUTexture,
+    /// read only
+    sdl_texture: *c.SDL_GPUTexture,
 
     tex_type: TextureType,
     format: TextureFormat,
@@ -139,10 +140,10 @@ pub const Texture = struct {
         };
 
         return .{
-            ._sdl_texture = try sdlCheck(
+            .sdl_texture = try sdlCheck(
                 @src(),
                 *c.SDL_GPUTexture,
-                c.SDL_CreateGPUTexture(gpu_device.toSdl(), &gpu_tex_info),
+                c.SDL_CreateGPUTexture(gpu_device.sdl_gpu_device, &gpu_tex_info),
                 TextureError.FailedToCreateGpuTexture,
             ),
             .tex_type = tex_type,
@@ -154,11 +155,7 @@ pub const Texture = struct {
     }
 
     pub fn deinit(self: *@This(), gpu_device: *GpuDevice) void {
-        c.SDL_ReleaseGPUTexture(gpu_device.toSdl(), self._sdl_texture);
-    }
-
-    pub fn toSdl(self: *@This()) *c.SDL_GPUTexture {
-        return self._sdl_texture;
+        c.SDL_ReleaseGPUTexture(gpu_device.sdl_gpu_device, self.sdl_texture);
     }
 
     /// needs to be implemented
@@ -169,7 +166,9 @@ pub const Texture = struct {
 };
 
 pub const SwapchainTexture = struct {
-    _sdl_texture: *c.SDL_GPUTexture,
+    /// read only
+    sdl_texture: *c.SDL_GPUTexture,
+
     format: TextureFormat,
 
     width: u32,
@@ -182,14 +181,10 @@ pub const SwapchainTexture = struct {
         height: u32,
     ) !@This() {
         return .{
-            ._sdl_texture = sdl_texture,
+            .sdl_texture = sdl_texture,
             .format = format,
             .width = width,
             .height = height,
         };
-    }
-
-    pub fn toSdl(self: *@This()) *c.SDL_GPUTexture {
-        return self._sdl_texture;
     }
 };

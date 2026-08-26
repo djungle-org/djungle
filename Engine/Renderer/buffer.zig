@@ -25,9 +25,10 @@ pub const Region = struct {
 };
 
 pub const Buffer = struct {
-    _sdl_buffer: *c.SDL_GPUBuffer,
-
-    _size: usize,
+    /// read only
+    sdl_buffer: *c.SDL_GPUBuffer,
+    /// read only
+    size: usize,
 
     pub fn init(gpu_device: *GpuDevice, usage: BufferUsage, size: usize) !@This() {
         const sdl_buf_usage: u32 = switch (usage) {
@@ -45,47 +46,39 @@ pub const Buffer = struct {
         };
 
         return .{
-            ._sdl_buffer = try sdlCheck(
+            .sdl_buffer = try sdlCheck(
                 @src(),
                 *c.SDL_GPUBuffer,
-                c.SDL_CreateGPUBuffer(gpu_device.toSdl(), &gpu_buf_info),
+                c.SDL_CreateGPUBuffer(gpu_device.sdl_gpu_device, &gpu_buf_info),
                 BufferError.FailedToCreateGpuBuffer,
             ),
-            ._size = size,
+            .size = size,
         };
     }
 
     pub fn deinit(self: *@This(), gpu_device: *GpuDevice) void {
-        c.SDL_ReleaseGPUBuffer(gpu_device.toSdl(), self._sdl_buffer);
+        c.SDL_ReleaseGPUBuffer(gpu_device.sdl_gpu_device, self.sdl_buffer);
     }
 
     pub fn upload(self: *@This(), copy_pass: *c.SDL_GPUCopyPass, transfer_buffer: transfer.Upload, transfer_buffer_offset: usize, buffer_region: Region) !void {
         const transfer_buffer_loc = c.SDL_GPUTransferBufferLocation{
-            .transfer_buffer = transfer_buffer._sdl_transfer_buffer,
+            .transfer_buffer = transfer_buffer.sdl_transfer_buffer,
             .offset = @intCast(transfer_buffer_offset),
         };
 
         const sdl_buffer_region = c.SDL_GPUBufferRegion{
-            .buffer = self._sdl_buffer,
+            .buffer = self.sdl_buffer,
             .offset = @intCast(buffer_region.offset),
             .size = @intCast(buffer_region.size),
         };
 
         c.SDL_UploadToGPUBuffer(copy_pass, &transfer_buffer_loc, &sdl_buffer_region, true);
     }
-
-    pub fn getSize(self: @This()) void {
-        return self._size;
-    }
-
-    pub fn toSdl(self: *@This()) *c.SDL_GPUBuffer {
-        return self._sdl_buffer;
-    }
 };
 
 pub const transfer = struct {
     pub const Upload = struct {
-        _sdl_transfer_buffer: *c.SDL_GPUTransferBuffer,
+        sdl_transfer_buffer: *c.SDL_GPUTransferBuffer,
 
         pub fn init(gpu_device: *GpuDevice, size: usize) !@This() {
             const transer_buf_info = c.SDL_GPUTransferBufferCreateInfo{
@@ -94,31 +87,31 @@ pub const transfer = struct {
             };
 
             return .{
-                ._sdl_transfer_buffer = try sdlCheck(
+                .sdl_transfer_buffer = try sdlCheck(
                     @src(),
                     *c.SDL_GPUTransferBuffer,
-                    c.SDL_CreateGPUTransferBuffer(gpu_device.toSdl(), &transer_buf_info),
+                    c.SDL_CreateGPUTransferBuffer(gpu_device.sdl_gpu_device, &transer_buf_info),
                     BufferError.FailedToCreateGpuTransferBuffer,
                 ),
             };
         }
 
         pub fn deinit(self: *@This(), gpu_device: *GpuDevice) void {
-            c.SDL_ReleaseGPUTransferBuffer(gpu_device.toSdl(), self._sdl_transfer_buffer);
+            c.SDL_ReleaseGPUTransferBuffer(gpu_device.sdl_gpu_device, self.sdl_transfer_buffer);
         }
 
         pub fn upload(self: *@This(), gpu_device: *GpuDevice, comptime T: type, buffer: []const T) !void {
             const mem = try sdlCheck(
                 @src(),
                 *anyopaque,
-                c.SDL_MapGPUTransferBuffer(gpu_device.toSdl(), self._sdl_transfer_buffer, true),
+                c.SDL_MapGPUTransferBuffer(gpu_device.sdl_gpu_device, self.sdl_transfer_buffer, true),
                 BufferError.FailedToMapTransferBuffer,
             );
 
             const dest: [*]T = @ptrCast(@alignCast(mem));
             @memcpy(dest[0..buffer.len], buffer);
 
-            c.SDL_UnmapGPUTransferBuffer(gpu_device.toSdl(), self._sdl_transfer_buffer);
+            c.SDL_UnmapGPUTransferBuffer(gpu_device.sdl_gpu_device, self.sdl_transfer_buffer);
         }
     };
 

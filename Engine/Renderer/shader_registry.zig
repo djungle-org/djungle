@@ -21,8 +21,10 @@ pub const DescriptorCounts = struct {
 };
 
 pub const Shader = struct {
-    _sdl_gpu_shader: *c.SDL_GPUShader,
-    _kind: ShaderKind,
+    /// read only
+    sdl_gpu_shader: *c.SDL_GPUShader,
+    /// read only
+    kind: ShaderKind,
 
     pub fn init(
         gpu_device: *GpuDevice,
@@ -48,20 +50,16 @@ pub const Shader = struct {
         };
 
         return .{
-            ._sdl_gpu_shader = c.SDL_CreateGPUShader(gpu_device.toSdl(), &shader_info) orelse {
+            .sdl_gpu_shader = c.SDL_CreateGPUShader(gpu_device.sdl_gpu_device, &shader_info) orelse {
                 log.err(@src(), "{s}", .{c.SDL_GetError()});
                 return ShaderError.FailedToCreateGpuShader;
             },
-            ._kind = shader_kind,
+            .kind = shader_kind,
         };
     }
 
     pub fn deinit(self: *@This(), gpu_device: *GpuDevice) void {
-        c.SDL_ReleaseGPUShader(gpu_device.toSdl(), self._sdl_gpu_shader);
-    }
-
-    pub fn toSdl(self: *@This()) *c.SDL_GPUShader {
-        return self._sdl_gpu_shader;
+        c.SDL_ReleaseGPUShader(gpu_device.sdl_gpu_device, self.sdl_gpu_shader);
     }
 };
 
@@ -70,34 +68,35 @@ pub const ShaderRegistryError = error{
 };
 
 pub const ShaderRegistry = struct {
-    _shader_map: std.StringHashMap(Shader),
+    /// internal
+    shader_map: std.StringHashMap(Shader),
 
     pub fn init(gpa: std.mem.Allocator) !@This() {
         return .{
-            ._shader_map = std.StringHashMap(Shader).init(gpa),
+            .shader_map = std.StringHashMap(Shader).init(gpa),
         };
     }
 
     pub fn deinit(self: *@This(), gpu_device: *GpuDevice) void {
-        var iter = self._shader_map.iterator();
+        var iter = self.shader_map.iterator();
 
         while (iter.next()) |entry| {
             entry.value_ptr.deinit(gpu_device);
         }
 
-        self._shader_map.deinit();
+        self.shader_map.deinit();
     }
 
     pub fn clearRetainingCapacity(self: *@This()) void {
-        self._shader_map.clearRetainingCapacity();
+        self.shader_map.clearRetainingCapacity();
     }
 
     pub fn put(self: *@This(), name: []const u8, shader: Shader) !void {
-        try self._shader_map.put(name, shader);
+        try self.shader_map.put(name, shader);
     }
 
     pub fn get(self: *@This(), shader_name: []const u8) !Shader {
-        return self._shader_map.get(shader_name) orelse {
+        return self.shader_map.get(shader_name) orelse {
             return ShaderRegistryError.FailedToGetShaderFromRegistry;
         };
     }

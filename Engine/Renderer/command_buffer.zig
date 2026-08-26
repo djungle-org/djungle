@@ -16,32 +16,29 @@ pub const CommandBufferError = error{
 };
 
 pub const CommandBuffer = struct {
-    _sdl_command_buffer: *c.SDL_GPUCommandBuffer,
+    /// read only
+    sdl_command_buffer: *c.SDL_GPUCommandBuffer,
 
     pub fn acquire(gpu_device: *GpuDevice) !@This() {
         return .{
-            ._sdl_command_buffer = try sdlCheck(
+            .sdl_command_buffer = try sdlCheck(
                 @src(),
                 *c.SDL_GPUCommandBuffer,
-                c.SDL_AcquireGPUCommandBuffer(gpu_device.toSdl()),
+                c.SDL_AcquireGPUCommandBuffer(gpu_device.sdl_gpu_device),
                 CommandBufferError.FailedToAcquire,
             ),
         };
     }
 
     pub fn submit(self: *@This()) !void {
-        try sdlCheckBool(@src(), c.SDL_SubmitGPUCommandBuffer(self.toSdl()), CommandBufferError.FailedToSubmit);
-    }
-
-    pub fn toSdl(self: *@This()) *c.SDL_GPUCommandBuffer {
-        return self._sdl_command_buffer;
+        try sdlCheckBool(@src(), c.SDL_SubmitGPUCommandBuffer(self.sdl_command_buffer), CommandBufferError.FailedToSubmit);
     }
 
     pub fn beginCopyPass(self: *@This()) !*c.SDL_GPUCopyPass {
         return try sdlCheck(
             @src(),
             *c.SDL_GPUCopyPass,
-            c.SDL_BeginGPUCopyPass(self.toSdl()),
+            c.SDL_BeginGPUCopyPass(self.sdl_command_buffer),
             CommandBufferError.FailedToBeginCopyPass,
         );
     }
@@ -54,8 +51,8 @@ pub const CommandBuffer = struct {
         try sdlCheckBool(
             @src(),
             c.SDL_WaitAndAcquireGPUSwapchainTexture(
-                self.toSdl(),
-                window.toSdl(),
+                self.sdl_command_buffer,
+                window.sdl_window,
                 &swapchain_tex,
                 &swapchain_tex_width,
                 &swapchain_tex_height,
@@ -71,6 +68,6 @@ pub const CommandBuffer = struct {
 
     /// data must be in std140 layout conventions
     pub fn pushVertexUniformData(self: *@This(), slot_idx: u32, comptime T: type, push_data: *const T) void {
-        c.SDL_PushGPUVertexUniformData(self.toSdl(), slot_idx, @ptrCast(push_data), @sizeOf(T));
+        c.SDL_PushGPUVertexUniformData(self.sdl_command_buffer, slot_idx, @ptrCast(push_data), @sizeOf(T));
     }
 };

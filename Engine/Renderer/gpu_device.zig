@@ -21,7 +21,8 @@ pub const GpuDriver = enum {
 };
 
 pub const GpuDevice = struct {
-    _sdl_gpu_device: *c.SDL_GPUDevice,
+    /// read only
+    sdl_gpu_device: *c.SDL_GPUDevice,
 
     pub fn init(gpu_driver: GpuDriver, debug_mode: bool, window: *win.Window) !@This() {
         const gpu_driver_name: ?[]const u8 = switch (gpu_driver) {
@@ -73,24 +74,20 @@ pub const GpuDevice = struct {
 
         try sdlCheckBool(
             @src(),
-            c.SDL_ClaimWindowForGPUDevice(sdl_gpu_device, window.toSdl()),
+            c.SDL_ClaimWindowForGPUDevice(sdl_gpu_device, window.sdl_window),
             GpuDeviceError.FailedToClaimWindowForGpu,
         );
 
         return .{
-            ._sdl_gpu_device = sdl_gpu_device,
+            .sdl_gpu_device = sdl_gpu_device,
         };
     }
 
     pub fn deinit(self: *@This()) void {
-        c.SDL_DestroyGPUDevice(self._sdl_gpu_device);
+        c.SDL_DestroyGPUDevice(self.sdl_gpu_device);
     }
 
     pub fn getSwapchainFormat(self: *@This(), window: *win.Window) !TextureFormat {
-        return try TextureFormat.fromSdl(c.SDL_GetGPUSwapchainTextureFormat(self.toSdl(), window.toSdl()));
-    }
-
-    pub fn toSdl(self: *@This()) *c.SDL_GPUDevice {
-        return self._sdl_gpu_device;
+        return try TextureFormat.fromSdl(c.SDL_GetGPUSwapchainTextureFormat(self.sdl_gpu_device, window.sdl_window));
     }
 };

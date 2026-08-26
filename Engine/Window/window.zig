@@ -15,10 +15,12 @@ pub const WindowError = error{
 };
 
 pub const Window = struct {
-    _width: u32,
-    _height: u32,
-
-    _sdl_window: *c.SDL_Window,
+    /// read only
+    sdl_window: *c.SDL_Window,
+    /// read only
+    width: u32,
+    /// read only
+    height: u32,
 
     pub fn init(width: u32, height: u32, comptime name: [:0]const u8) !@This() {
         try sdlCheckBool(@src(), c.SDL_Init(c.SDL_INIT_VIDEO), WindowError.SdlInitFailed);
@@ -33,27 +35,15 @@ pub const Window = struct {
         );
 
         return Window{
-            ._width = width,
-            ._height = height,
-            ._sdl_window = sdl_window,
+            .width = width,
+            .height = height,
+            .sdl_window = sdl_window,
         };
     }
 
     pub fn deinit(self: *@This()) void {
-        c.SDL_DestroyWindow(self._sdl_window);
+        c.SDL_DestroyWindow(self.sdl_window);
         c.SDL_Quit();
-    }
-
-    pub fn getWidth(self: @This()) u32 {
-        return self._width;
-    }
-
-    pub fn getHeight(self: @This()) u32 {
-        return self._height;
-    }
-
-    pub fn toSdl(self: *@This()) *c.SDL_Window {
-        return self._sdl_window;
     }
 
     pub fn pollEvents(_: @This()) bool {

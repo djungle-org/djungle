@@ -38,26 +38,26 @@ const Matrices = struct {
 };
 
 pub const Renderer = struct {
-    _window: *win.Window,
-    _swapchain_format: tex.TextureFormat,
-    _gpu_device: dev.GpuDevice,
-    _depth_tex: tex.Texture,
-    _object: mesh.Mesh,
-    _graphics_pipeline: *c.SDL_GPUGraphicsPipeline,
-    _shaders: ShaderRegistry,
+    window: *win.Window,
+    swapchain_format: tex.TextureFormat,
+    gpu_device: dev.GpuDevice,
+    depth_tex: tex.Texture,
+    object: mesh.Mesh,
+    graphics_pipeline: *c.SDL_GPUGraphicsPipeline,
+    shaders: ShaderRegistry,
 
     pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, window: *win.Window, gpu_driver: dev.GpuDriver, debug: bool, spirv_bin_dir_path: []const u8) !void {
-        self._window = window;
+        self.window = window;
 
-        self._gpu_device = try dev.GpuDevice.init(gpu_driver, debug, self._window);
+        self.gpu_device = try dev.GpuDevice.init(gpu_driver, debug, self.window);
 
-        self._swapchain_format = try self._gpu_device.getSwapchainFormat(self._window);
+        self.swapchain_format = try self.gpu_device.getSwapchainFormat(self.window);
 
-        self._shaders = try ShaderRegistry.init(gpa);
+        self.shaders = try ShaderRegistry.init(gpa);
         try self.loadShaders(io, gpa, spirv_bin_dir_path);
 
-        self._object = undefined;
-        try self._object.init(&self._gpu_device, &mesh.cube_vertices, &mesh.cube_indices);
+        self.object = undefined;
+        try self.object.init(&self.gpu_device, &mesh.cube_vertices, &mesh.cube_indices);
 
         const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
             .slot = 0,
@@ -80,18 +80,18 @@ pub const Renderer = struct {
             },
         };
 
-        self._depth_tex = try tex.Texture.init(
-            &self._gpu_device,
+        self.depth_tex = try tex.Texture.init(
+            &self.gpu_device,
             ._2d,
             .D32_Float,
             .{ .depth_stencil_target = true },
-            window._width,
-            window._height,
+            window.width,
+            window.height,
             ._1,
         );
 
         const color_target_description = c.SDL_GPUColorTargetDescription{
-            .format = self._swapchain_format.toSdl(),
+            .format = self.swapchain_format.toSdl(),
             .blend_state = .{
                 .enable_blend = true,
                 .src_color_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE,
@@ -104,12 +104,12 @@ pub const Renderer = struct {
             },
         };
 
-        var vert_shader = try self._shaders.get("simple_vert");
-        var frag_shader = try self._shaders.get("simple_frag");
+        const vert_shader = try self.shaders.get("simple_vert");
+        const frag_shader = try self.shaders.get("simple_frag");
 
         const gfx_pipeline_info = c.SDL_GPUGraphicsPipelineCreateInfo{
-            .vertex_shader = vert_shader.toSdl(),
-            .fragment_shader = frag_shader.toSdl(),
+            .vertex_shader = vert_shader.sdl_gpu_shader,
+            .fragment_shader = frag_shader.sdl_gpu_shader,
             .vertex_input_state = .{
                 .num_vertex_buffers = 1,
                 .vertex_buffer_descriptions = &vertex_buf_description,
@@ -155,37 +155,37 @@ pub const Renderer = struct {
                 .num_color_targets = 1,
                 .color_target_descriptions = &color_target_description,
                 .has_depth_stencil_target = true,
-                .depth_stencil_format = self._depth_tex.format.toSdl(),
+                .depth_stencil_format = self.depth_tex.format.toSdl(),
             },
         };
 
-        self._graphics_pipeline = try sdlCheck(
+        self.graphics_pipeline = try sdlCheck(
             @src(),
             *c.SDL_GPUGraphicsPipeline,
-            c.SDL_CreateGPUGraphicsPipeline(self._gpu_device.toSdl(), &gfx_pipeline_info),
+            c.SDL_CreateGPUGraphicsPipeline(self.gpu_device.sdl_gpu_device, &gfx_pipeline_info),
             RendererError.FailedToCreateGpuGraphicsPipeline,
         );
     }
 
     pub fn deinit(self: *@This()) void {
-        c.SDL_ReleaseGPUGraphicsPipeline(self._gpu_device.toSdl(), self._graphics_pipeline);
+        c.SDL_ReleaseGPUGraphicsPipeline(self.gpu_device.sdl_gpu_device, self.graphics_pipeline);
 
-        self._depth_tex.deinit(&self._gpu_device);
+        self.depth_tex.deinit(&self.gpu_device);
 
-        self._object.deinit(&self._gpu_device);
+        self.object.deinit(&self.gpu_device);
 
-        self._shaders.deinit(&self._gpu_device);
+        self.shaders.deinit(&self.gpu_device);
 
-        self._gpu_device.deinit();
+        self.gpu_device.deinit();
     }
 
     pub fn render(self: *@This(), io: std.Io) !void {
-        var command_buffer = try cmd.CommandBuffer.acquire(&self._gpu_device);
+        var command_buffer = try cmd.CommandBuffer.acquire(&self.gpu_device);
 
-        var swapchain_tex = try command_buffer.waitAndAcquireSwapchainTexture(&self._gpu_device, self._window);
+        const swapchain_tex = try command_buffer.waitAndAcquireSwapchainTexture(&self.gpu_device, self.window);
 
         const color_target_info = c.SDL_GPUColorTargetInfo{
-            .texture = swapchain_tex.toSdl(),
+            .texture = swapchain_tex.sdl_texture,
             .mip_level = 0,
             .layer_or_depth_plane = 0,
             .clear_color = .{ .r = 0.5, .g = 0.2, .b = 0.7, .a = 1.0 },
@@ -196,7 +196,7 @@ pub const Renderer = struct {
         };
 
         const depth_stencil_target_info = c.SDL_GPUDepthStencilTargetInfo{
-            .texture = self._depth_tex.toSdl(),
+            .texture = self.depth_tex.sdl_texture,
             .clear_depth = 1, // can be ignored if loadop isnt clear
             .load_op = c.SDL_GPU_LOADOP_CLEAR,
             .store_op = c.SDL_GPU_STOREOP_STORE,
@@ -212,7 +212,7 @@ pub const Renderer = struct {
             @src(),
             *c.SDL_GPURenderPass,
             c.SDL_BeginGPURenderPass(
-                command_buffer.toSdl(),
+                command_buffer.sdl_command_buffer,
                 &color_target_info,
                 1,
                 &depth_stencil_target_info,
@@ -220,7 +220,7 @@ pub const Renderer = struct {
             RendererError.FailedToBeginRenderPass,
         );
 
-        self._object.bind(render_pass);
+        self.object.bind(render_pass);
 
         const viewport = c.SDL_GPUViewport{
             .x = 0,
@@ -232,10 +232,10 @@ pub const Renderer = struct {
         };
         c.SDL_SetGPUViewport(render_pass, &viewport);
 
-        c.SDL_BindGPUGraphicsPipeline(render_pass, self._graphics_pipeline);
+        c.SDL_BindGPUGraphicsPipeline(render_pass, self.graphics_pipeline);
 
-        const f_width: f32 = @floatFromInt(self._window.getWidth());
-        const f_height: f32 = @floatFromInt(self._window.getHeight());
+        const f_width: f32 = @floatFromInt(self.window.width);
+        const f_height: f32 = @floatFromInt(self.window.height);
 
         const time = std.Io.Clock.awake.now(io);
         const now: f32 = @floatFromInt(time.toMilliseconds());
@@ -252,7 +252,7 @@ pub const Renderer = struct {
 
         command_buffer.pushVertexUniformData(0, Matrices, &matrices);
 
-        self._object.draw(render_pass);
+        self.object.draw(render_pass);
 
         c.SDL_EndGPURenderPass(render_pass);
 
@@ -260,7 +260,7 @@ pub const Renderer = struct {
     }
 
     fn loadShaders(self: *@This(), io: std.Io, allocator: std.mem.Allocator, spirv_bin_dir_path: []const u8) !void {
-        self._shaders.clearRetainingCapacity();
+        self.shaders.clearRetainingCapacity();
 
         var arena_state = std.heap.ArenaAllocator.init(allocator);
         defer arena_state.deinit();
@@ -313,7 +313,7 @@ pub const Renderer = struct {
             const binary_buf = try spirv_bin_dir.readFileAlloc(io, binary_file.binary_path, arena, .unlimited);
 
             const shader = try Shader.init(
-                &self._gpu_device,
+                &self.gpu_device,
                 binary_buf.len * @sizeOf(u8),
                 binary_buf,
                 try arena.dupeSentinel(u8, entrypoint_name, 0),
@@ -321,7 +321,7 @@ pub const Renderer = struct {
                 descriptor_counts,
             );
 
-            try self._shaders.put(binary_file.name, shader);
+            try self.shaders.put(binary_file.name, shader);
         }
     }
 };
