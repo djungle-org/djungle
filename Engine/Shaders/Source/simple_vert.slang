@@ -9,7 +9,7 @@ struct Matrices {
 ConstantBuffer<Matrices> matrices;
 
 struct VSInput {
-  float2 pos;
+  float3 pos;
   float3 col;
   // float2 texCoord;
 };
@@ -19,7 +19,7 @@ VSOutput vertMain(VSInput input) {
   VSOutput output;
   output.pos =
       mul(matrices.proj,
-          mul(matrices.view, mul(matrices.model, float4(input.pos, 0.0, 1.0))));
+          mul(matrices.view, mul(matrices.model, float4(input.pos, 1.0))));
 
   output.col = input.col;
   // output.texCoord = input.texCoord;

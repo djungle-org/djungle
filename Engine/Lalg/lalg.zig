@@ -500,7 +500,7 @@ pub fn lookAt(eye: Vec3, target: Vec3, world_up: Vec3) !Mat4 {
         .{ 0, 0, 0, 1 },
     });
 
-    return mulMat(Mat4, rotation, translation);
+    return mulMat(Mat4, translation, rotation);
 }
 
 test "matrix lookAt" {

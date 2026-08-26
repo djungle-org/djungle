@@ -13,7 +13,11 @@ pub const Mesh = struct {
     _vertex_buf_binding: c.SDL_GPUBufferBinding,
     _index_buf_binding: c.SDL_GPUBufferBinding,
 
+    _index_count: u32,
+
     pub fn init(self: *@This(), gpu_device: *dev.GpuDevice, comptime Vertex: type, vertices: []const Vertex, indices: []const u32) !void {
+        self._index_count = @intCast(indices.len);
+
         var cmd_buf = try cmd.CommandBuffer.acquire(gpu_device);
 
         const vertex_buf_size = vertices.len * @sizeOf(Vertex);
@@ -71,4 +75,21 @@ pub const Mesh = struct {
         c.SDL_BindGPUVertexBuffers(render_pass, 0, &self._vertex_buf_binding, 1);
         c.SDL_BindGPUIndexBuffer(render_pass, &self._index_buf_binding, c.SDL_GPU_INDEXELEMENTSIZE_32BIT);
     }
+
+    pub fn draw(self: *@This(), render_pass: *c.SDL_GPURenderPass) void {
+        c.SDL_DrawGPUIndexedPrimitives(render_pass, self._index_count, 1, 0, 0, 0);
+    }
 };
+
+// quad
+// const vertices = [_]Vertex{
+//     .{ .pos = .{ -0.5, -0.5 }, .col = .{ 1.0, 0.0, 0.0 } },
+//     .{ .pos = .{ 0.5, -0.5 }, .col = .{ 0.0, 1.0, 0.0 } },
+//     .{ .pos = .{ 0.5, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
+//     .{ .pos = .{ -0.5, 0.5 }, .col = .{ 0.33, 0.33, 0.33 } },
+// };
+//
+// const indices = [_]u32{
+//     0, 1, 2,
+//     2, 3, 0,
+// };

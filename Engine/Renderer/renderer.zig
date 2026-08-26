@@ -33,7 +33,7 @@ pub const RendererError = error{
 };
 
 const Vertex = struct {
-    pos: la.Vec2,
+    pos: la.Vec3,
     col: la.Vec3,
 };
 
@@ -63,15 +63,67 @@ pub const Renderer = struct {
         try self.loadShaders(io, gpa, spirv_bin_dir_path);
 
         const vertices = [_]Vertex{
-            .{ .pos = .{ -0.5, -0.5 }, .col = .{ 1.0, 0.0, 0.0 } },
-            .{ .pos = .{ 0.5, -0.5 }, .col = .{ 0.0, 1.0, 0.0 } },
-            .{ .pos = .{ 0.5, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
-            .{ .pos = .{ -0.5, 0.5 }, .col = .{ 0.33, 0.33, 0.33 } },
+            // top
+            .{ .pos = .{ -0.5, 0.5, -0.5 }, .col = .{ 1.0, 1.0, 1.0 } },
+            .{ .pos = .{ -0.5, 0.5, 0.5 }, .col = .{ 1.0, 1.0, 1.0 } },
+            .{ .pos = .{ 0.5, 0.5, 0.5 }, .col = .{ 1.0, 1.0, 1.0 } },
+            .{ .pos = .{ 0.5, 0.5, -0.5 }, .col = .{ 1.0, 1.0, 1.0 } },
+
+            // bottom
+            .{ .pos = .{ -0.5, -0.5, -0.5 }, .col = .{ 1.0, 0.8, 0.0 } },
+            .{ .pos = .{ 0.5, -0.5, -0.5 }, .col = .{ 1.0, 0.8, 0.0 } },
+            .{ .pos = .{ 0.5, -0.5, 0.5 }, .col = .{ 1.0, 0.8, 0.0 } },
+            .{ .pos = .{ -0.5, -0.5, 0.5 }, .col = .{ 1.0, 0.8, 0.0 } },
+
+            // left
+            .{ .pos = .{ -0.5, -0.5, 0.5 }, .col = .{ 1.0, 0.3, 0.0 } },
+            .{ .pos = .{ -0.5, 0.5, 0.5 }, .col = .{ 1.0, 0.3, 0.0 } },
+            .{ .pos = .{ -0.5, 0.5, -0.5 }, .col = .{ 1.0, 0.3, 0.0 } },
+            .{ .pos = .{ -0.5, -0.5, -0.5 }, .col = .{ 1.0, 0.3, 0.0 } },
+
+            // right
+            .{ .pos = .{ 0.5, -0.5, -0.5 }, .col = .{ 0.8, 0.0, 0.0 } },
+            .{ .pos = .{ 0.5, 0.5, -0.5 }, .col = .{ 0.8, 0.0, 0.0 } },
+            .{ .pos = .{ 0.5, 0.5, 0.5 }, .col = .{ 0.8, 0.0, 0.0 } },
+            .{ .pos = .{ 0.5, -0.5, 0.5 }, .col = .{ 0.8, 0.0, 0.0 } },
+
+            // front
+            .{ .pos = .{ -0.5, -0.5, 0.5 }, .col = .{ 0.0, 0.6, 0.3 } },
+            .{ .pos = .{ 0.5, -0.5, 0.5 }, .col = .{ 0.0, 0.6, 0.3 } },
+            .{ .pos = .{ 0.5, 0.5, 0.5 }, .col = .{ 0.0, 0.6, 0.3 } },
+            .{ .pos = .{ -0.5, 0.5, 0.5 }, .col = .{ 0.0, 0.6, 0.3 } },
+
+            // back
+            .{ .pos = .{ 0.5, -0.5, -0.5 }, .col = .{ 0.0, 0.3, 0.7 } },
+            .{ .pos = .{ -0.5, -0.5, -0.5 }, .col = .{ 0.0, 0.3, 0.7 } },
+            .{ .pos = .{ -0.5, 0.5, -0.5 }, .col = .{ 0.0, 0.3, 0.7 } },
+            .{ .pos = .{ 0.5, 0.5, -0.5 }, .col = .{ 0.0, 0.3, 0.7 } },
         };
 
         const indices = [_]u32{
-            0, 1, 2,
-            2, 3, 0,
+            // top
+            0,  1,  2,
+            2,  3,  0,
+
+            // bottom
+            4,  5,  6,
+            6,  7,  4,
+
+            // left
+            8,  9,  10,
+            10, 11, 8,
+
+            // right
+            12, 13, 14,
+            14, 15, 12,
+
+            // front
+            16, 17, 18,
+            18, 19, 16,
+
+            // back
+            20, 21, 22,
+            22, 23, 20,
         };
 
         self._object = undefined;
@@ -87,7 +139,7 @@ pub const Renderer = struct {
             .{ // pos
                 .location = 0,
                 .buffer_slot = 0,
-                .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+                .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
                 .offset = 0,
             },
             .{ // col
@@ -137,7 +189,7 @@ pub const Renderer = struct {
             .primitive_type = c.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
             .rasterizer_state = .{
                 .fill_mode = c.SDL_GPU_FILLMODE_FILL,
-                .cull_mode = c.SDL_GPU_CULLMODE_NONE, // CHANGE LATER
+                .cull_mode = c.SDL_GPU_CULLMODE_BACK,
                 .front_face = c.SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,
                 .enable_depth_bias = false,
                 .depth_bias_constant_factor = 0, // these dont need to be added since depth bias is off
@@ -256,18 +308,21 @@ pub const Renderer = struct {
         const f_height: f32 = @floatFromInt(self._window.getHeight());
 
         const time = std.Io.Clock.awake.now(io);
-        const seconds: f32 = @floatFromInt(time.toMilliseconds());
+        const now: f32 = @floatFromInt(time.toMilliseconds());
 
         const matrices = Matrices{
-            .model = la.translate(.{ @sin(seconds / 400), 0, @cos(seconds / 400) + 2 }),
-            .view = try la.lookAt(.{ 0, 0.5, 1.5 }, .{ 0, 0, 5 }, .{ 0, 1, 0 }),
+            .model = la.mulMat(
+                la.Mat4,
+                la.translate(.{ @sin(now / 400), 0, @cos(now / 400) + 2 }),
+                try la.rotate(.{ 0, 1, 0 }, now / 400),
+            ),
+            .view = try la.lookAt(.{ 0, 1, -2 }, .{ 0, 0, 5 }, .{ 0, 1, 0 }),
             .proj = la.perspective(f_width / f_height, std.math.degreesToRadians(60), 0.1, 100),
         };
 
         command_buffer.pushVertexUniformData(0, Matrices, &matrices);
 
-        // c.SDL_DrawGPUPrimitives(render_pass, 3, 1, 0, 0);
-        c.SDL_DrawGPUIndexedPrimitives(render_pass, 6, 1, 0, 0, 0);
+        self._object.draw(render_pass);
 
         c.SDL_EndGPURenderPass(render_pass);
 
