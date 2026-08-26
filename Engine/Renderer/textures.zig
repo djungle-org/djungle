@@ -91,23 +91,26 @@ pub const TextureUsage = packed struct {
     /// Texture supports reads and writes in the same compute shader. This is NOT equivalent to READ | WRITE
     compute_storage_simultaneous_read_write: bool = false,
 
-    _padding: u25 = 0,
+    padding: u25 = 0,
 
-    pub fn toU32(self: @This()) u32 {
-        return @bitCast(self);
+    pub fn toU32(self: *const @This()) u32 {
+        return @bitCast(self.*);
     }
 };
 
 pub const Texture = struct {
     /// read only
     sdl_texture: *c.SDL_GPUTexture,
-
-    tex_type: TextureType,
-    format: TextureFormat,
-    usage: TextureUsage,
-
+    /// readonly
     width: u32,
+    /// readonly
     height: u32,
+    /// readonly
+    tex_type: TextureType,
+    /// readonly
+    format: TextureFormat,
+    /// readonly
+    usage: TextureUsage,
 
     /// sampler + graphics_storage_read or compute_storage_read is invalid and will return an error
     pub fn init(

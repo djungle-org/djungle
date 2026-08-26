@@ -22,7 +22,7 @@ pub const Window = struct {
     /// read only
     height: u32,
 
-    pub fn init(width: u32, height: u32, comptime name: [:0]const u8) !@This() {
+    pub fn init(width: u32, height: u32, name: [:0]const u8) !@This() {
         try sdlCheckBool(@src(), c.SDL_Init(c.SDL_INIT_VIDEO), WindowError.SdlInitFailed);
 
         try sdlCheckBool(@src(), c.SDL_SetHint(c.SDL_HINT_APP_ID, name), WindowError.SdlSetHintFailed);
@@ -46,7 +46,7 @@ pub const Window = struct {
         c.SDL_Quit();
     }
 
-    pub fn pollEvents(_: @This()) bool {
+    pub fn pollEvents(_: *const @This()) bool {
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event)) {
             if (event.type == c.SDL_EVENT_QUIT) {

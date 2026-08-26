@@ -60,7 +60,7 @@ pub const Buffer = struct {
         c.SDL_ReleaseGPUBuffer(gpu_device.sdl_gpu_device, self.sdl_buffer);
     }
 
-    pub fn upload(self: *@This(), copy_pass: *c.SDL_GPUCopyPass, transfer_buffer: transfer.Upload, transfer_buffer_offset: usize, buffer_region: Region) !void {
+    pub fn upload(self: *@This(), copy_pass: *c.SDL_GPUCopyPass, transfer_buffer: *const transfer.Upload, transfer_buffer_offset: usize, buffer_region: Region) !void {
         const transfer_buffer_loc = c.SDL_GPUTransferBufferLocation{
             .transfer_buffer = transfer_buffer.sdl_transfer_buffer,
             .offset = @intCast(transfer_buffer_offset),

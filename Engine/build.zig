@@ -4,42 +4,6 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const shader_tools_module = b.addModule("ShaderTools", .{
-        .root_source_file = b.path("Shaders/shader_tools.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    // shader compiler executable
-
-    const shader_compiler = b.addExecutable(.{
-        .name = "shader_compiler",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("Shaders/shader_compiler.zig"),
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-        }),
-    });
-
-    shader_compiler.root_module.addImport("ShaderTools", shader_tools_module);
-
-    b.installArtifact(shader_compiler);
-
-    const run_shader_compiler = b.addRunArtifact(shader_compiler);
-    run_shader_compiler.stdio = .inherit;
-    run_shader_compiler.addDirectoryArg(b.path("Shaders/Source"));
-    const compiled_shaders_dir = run_shader_compiler.addOutputDirectoryArg("compiled_shaders_dir");
-
-    // to be used by game build.zig to run shader_compiler executable and make zig-out shader directory
-    b.addNamedLazyPath("compiled_shaders", compiled_shaders_dir);
-
-    const shader_compiler_tests = b.addTest(.{ .root_module = shader_compiler.root_module });
-
-    const run_shader_compiler_tests = b.addRunArtifact(shader_compiler_tests);
-    const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_shader_compiler_tests.step);
-
     // engine module
 
     const vulkan_module = b.dependency("vulkan", .{
@@ -77,7 +41,6 @@ pub fn build(b: *std.Build) !void {
 
     const lalg_tests = b.addTest(.{ .root_module = lalg_module });
     const run_lalg_tests = b.addRunArtifact(lalg_tests);
-    test_step.dependOn(&run_lalg_tests.step);
 
     const window_module = b.addModule("Window", .{
         .root_source_file = b.path("Window/window.zig"),
@@ -88,6 +51,14 @@ pub fn build(b: *std.Build) !void {
 
     window_module.addImport("C", c_module);
 
+    const shaders_module = b.addModule("Shaders", .{
+        .root_source_file = b.path("Shaders/shaders.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    shaders_module.addImport("C", c_module);
+
     const renderer_module = b.addModule("Renderer", .{
         .root_source_file = b.path("Renderer/renderer.zig"),
         .target = target,
@@ -95,12 +66,14 @@ pub fn build(b: *std.Build) !void {
         .link_libc = true,
     });
 
+    shaders_module.addImport("Renderer", renderer_module);
+
     renderer_module.addImport("C", c_module);
     renderer_module.addImport("Vulkan", vulkan_module);
     renderer_module.addImport("Lalg", lalg_module);
     renderer_module.addImport("DeletionQueue", deletion_queue_module);
     renderer_module.addImport("Window", window_module);
-    renderer_module.addImport("ShaderTools", shader_tools_module);
+    renderer_module.addImport("Shaders", shaders_module);
 
     const engine_module = b.addModule("Engine", .{
         .root_source_file = b.path("engine.zig"),
@@ -114,11 +87,45 @@ pub fn build(b: *std.Build) !void {
     engine_module.addImport("Window", window_module);
     engine_module.addImport("Renderer", renderer_module);
 
-    for ([_]*std.Build.Module{ window_module, renderer_module, engine_module, deletion_queue_module, c_module }) |m| {
+    for ([_]*std.Build.Module{ window_module, renderer_module, engine_module, deletion_queue_module, c_module, shaders_module }) |m| {
         m.addImport("Logging", logging_module);
     }
 
     engine_module.linkSystemLibrary("SDL3", .{ .needed = true });
+
+    // shader compiler executable
+
+    const shader_compiler = b.addExecutable(.{
+        .name = "shader_compiler",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("Shaders/shader_compiler.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
+    });
+
+    shader_compiler.root_module.addImport("Shaders", shaders_module);
+
+    b.installArtifact(shader_compiler);
+
+    const run_shader_compiler = b.addRunArtifact(shader_compiler);
+    run_shader_compiler.stdio = .inherit;
+    run_shader_compiler.addDirectoryArg(b.path("Shaders/Source"));
+    const compiled_shaders_dir = run_shader_compiler.addOutputDirectoryArg("compiled_shaders_dir");
+
+    // to be used by game build.zig to run shader_compiler executable and make zig-out shader directory
+    b.addNamedLazyPath("compiled_shaders", compiled_shaders_dir);
+
+    const shader_compiler_tests = b.addTest(.{ .root_module = shader_compiler.root_module });
+
+    const run_shader_compiler_tests = b.addRunArtifact(shader_compiler_tests);
+    const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&run_shader_compiler_tests.step);
+
+    test_step.dependOn(&run_lalg_tests.step);
+
+    // exe check step
 
     const exe_check = b.addExecutable(.{
         .name = "engine-check",

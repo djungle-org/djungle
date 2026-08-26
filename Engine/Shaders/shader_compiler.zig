@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const st = @import("ShaderTools");
+const sh = @import("Shaders");
 
 pub fn main(init: std.process.Init) !void {
     const arena = init.arena.allocator();
@@ -17,9 +17,9 @@ pub fn main(init: std.process.Init) !void {
     const shaders_zon_buf = try shader_src_dir.readFileAlloc(io, "shaders.zon", arena, .unlimited);
 
     const shaders_zon_buf_0 = try arena.dupeSentinel(u8, shaders_zon_buf, 0);
-    const shader_files = try std.zon.parse.fromSliceAlloc([]st.ShaderFile, arena, shaders_zon_buf_0, null, .{});
+    const shader_files = try std.zon.parse.fromSliceAlloc([]sh.ShaderFile, arena, shaders_zon_buf_0, null, .{});
 
-    var binary_files = try std.ArrayList(st.ShaderBinary).initCapacity(arena, shader_files.len);
+    var binary_files = try std.ArrayList(sh.ShaderBinary).initCapacity(arena, shader_files.len);
 
     for (shader_files) |*shader_file| {
         const binary = try shader_file.compile(arena, io, shader_src_path, compiled_shaders_path);
@@ -51,7 +51,7 @@ test "parses shader zon with correct fields" {
     const zon_text_0 = try std.testing.allocator.dupeSentinel(u8, zon_text, 0);
     defer std.testing.allocator.free(zon_text_0);
 
-    const parsed = try std.zon.parse.fromSliceAlloc([]st.ShaderFile, std.testing.allocator, zon_text_0, null, .{});
+    const parsed = try std.zon.parse.fromSliceAlloc([]sh.ShaderFile, std.testing.allocator, zon_text_0, null, .{});
     defer std.zon.parse.free(std.testing.allocator, parsed);
 
     try std.testing.expectEqual(1, parsed.len);

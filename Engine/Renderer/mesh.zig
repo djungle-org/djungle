@@ -58,12 +58,12 @@ pub const Mesh = struct {
 
         const copy_pass = try cmd_buf.beginCopyPass();
 
-        try self.vertex_buffer.upload(copy_pass, transfer_buffer, 0, .{
+        try self.vertex_buffer.upload(copy_pass, &transfer_buffer, 0, .{
             .offset = 0,
             .size = vertex_buf_size,
         });
 
-        try self.index_buffer.upload(copy_pass, index_transfer_buf, 0, .{
+        try self.index_buffer.upload(copy_pass, &index_transfer_buf, 0, .{
             .offset = 0,
             .size = index_buf_size,
         });
@@ -79,12 +79,12 @@ pub const Mesh = struct {
     }
 
     /// binds the vertex and index buffer for the render pass
-    pub fn bind(self: *@This(), render_pass: *c.SDL_GPURenderPass) void {
+    pub fn bind(self: *const @This(), render_pass: *c.SDL_GPURenderPass) void {
         c.SDL_BindGPUVertexBuffers(render_pass, 0, &self.vertex_buf_binding, 1);
         c.SDL_BindGPUIndexBuffer(render_pass, &self.index_buf_binding, c.SDL_GPU_INDEXELEMENTSIZE_32BIT);
     }
 
-    pub fn draw(self: *@This(), render_pass: *c.SDL_GPURenderPass) void {
+    pub fn draw(self: *const @This(), render_pass: *c.SDL_GPURenderPass) void {
         c.SDL_DrawGPUIndexedPrimitives(render_pass, self.index_count, 1, 0, 0, 0);
     }
 };

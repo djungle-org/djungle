@@ -24,7 +24,7 @@ pub const GpuDevice = struct {
     /// read only
     sdl_gpu_device: *c.SDL_GPUDevice,
 
-    pub fn init(gpu_driver: GpuDriver, debug_mode: bool, window: *win.Window) !@This() {
+    pub fn init(gpu_driver: GpuDriver, debug_mode: bool, window: *const win.Window) !@This() {
         const gpu_driver_name: ?[]const u8 = switch (gpu_driver) {
             .Auto => null,
             .Vulkan => "vulkan",
@@ -87,7 +87,7 @@ pub const GpuDevice = struct {
         c.SDL_DestroyGPUDevice(self.sdl_gpu_device);
     }
 
-    pub fn getSwapchainFormat(self: *@This(), window: *win.Window) !TextureFormat {
+    pub fn getSwapchainFormat(self: *@This(), window: *const win.Window) !TextureFormat {
         return try TextureFormat.fromSdl(c.SDL_GetGPUSwapchainTextureFormat(self.sdl_gpu_device, window.sdl_window));
     }
 };

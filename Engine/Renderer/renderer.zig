@@ -4,20 +4,19 @@ const win = @import("Window");
 const log = @import("Logging");
 const vk = @import("Vulkan");
 const la = @import("Lalg");
-const st = @import("ShaderTools");
+const sh = @import("Shaders");
 
-const reg = @import("shader_registry.zig");
-const buf = @import("buffer.zig");
-const tex = @import("textures.zig");
-const dev = @import("gpu_device.zig");
-const cmd = @import("command_buffer.zig");
-const mesh = @import("mesh.zig");
+pub const buf = @import("buffer.zig");
+pub const tex = @import("textures.zig");
+pub const dev = @import("gpu_device.zig");
+pub const cmd = @import("command_buffer.zig");
+pub const mesh = @import("mesh.zig");
 
 const sdlCheck = @import("C").sdlCheck;
 const sdlCheckBool = @import("C").sdlCheckBool;
-const Shader = reg.Shader;
-const ShaderKind = reg.ShaderKind;
-const ShaderRegistry = reg.ShaderRegistry;
+const Shader = sh.Shader;
+const ShaderKind = sh.ShaderKind;
+const ShaderRegistry = sh.ShaderRegistry;
 
 pub const RendererError = error{
     FailedToCreateGpuDevice,
@@ -37,6 +36,7 @@ const Matrices = struct {
     proj: la.Mat4,
 };
 
+/// all fields are internal so they shouldnt be accessed outside of Renderer's methods
 pub const Renderer = struct {
     window: *win.Window,
     swapchain_format: tex.TextureFormat,
@@ -54,7 +54,7 @@ pub const Renderer = struct {
         self.swapchain_format = try self.gpu_device.getSwapchainFormat(self.window);
 
         self.shaders = try ShaderRegistry.init(gpa);
-        try self.loadShaders(io, gpa, spirv_bin_dir_path);
+        try sh.loadShaders(io, gpa, &self.shaders, &self.gpu_device, spirv_bin_dir_path);
 
         self.object = undefined;
         try self.object.init(&self.gpu_device, &mesh.cube_vertices, &mesh.cube_indices);
@@ -257,71 +257,5 @@ pub const Renderer = struct {
         c.SDL_EndGPURenderPass(render_pass);
 
         try command_buffer.submit();
-    }
-
-    fn loadShaders(self: *@This(), io: std.Io, allocator: std.mem.Allocator, spirv_bin_dir_path: []const u8) !void {
-        self.shaders.clearRetainingCapacity();
-
-        var arena_state = std.heap.ArenaAllocator.init(allocator);
-        defer arena_state.deinit();
-        const arena = arena_state.allocator();
-
-        const spirv_bin_dir = try std.Io.Dir.openDirAbsolute(io, spirv_bin_dir_path, .{ .iterate = true });
-        defer spirv_bin_dir.close(io);
-
-        const binaries_zon_buf = try spirv_bin_dir.readFileAlloc(io, "shader_binaries.zon", arena, .unlimited);
-
-        const binaries_zon_buf_0 = try arena.dupeSentinel(u8, binaries_zon_buf, 0);
-        const binary_files = try std.zon.parse.fromSliceAlloc([]st.ShaderBinary, arena, binaries_zon_buf_0, null, .{});
-
-        for (binary_files) |binary_file| {
-            const binary_json = try spirv_bin_dir.readFileAlloc(io, binary_file.json_path, arena, .unlimited);
-
-            const parsed = try std.json.parseFromSlice(std.json.Value, arena, binary_json, .{});
-            defer parsed.deinit();
-
-            const entrypoint = parsed.value.object.get("entryPoints").?.array.items[0].object;
-            const entrypoint_name = entrypoint.get("name").?.string;
-            const stage_name = entrypoint.get("stage").?.string;
-
-            const stage: ShaderKind = if (std.mem.eql(u8, stage_name, "vertex"))
-                .Vertex
-            else if (std.mem.eql(u8, stage_name, "fragment"))
-                .Fragment
-            else
-                return error.InvalidShaderStage;
-
-            const parameters = parsed.value.object.get("parameters").?.array.items;
-
-            var descriptor_counts = reg.DescriptorCounts{
-                .samplers = 0,
-                .storage_buffers = 0,
-                .storage_textures = 0,
-                .uniform_buffers = 0,
-            };
-
-            for (parameters) |parameter| {
-                const kind = parameter.object.get("type").?.object.get("kind").?.string;
-
-                if (std.mem.eql(u8, kind, "constantBuffer")) {
-                    descriptor_counts.uniform_buffers += 1;
-                } else {
-                    return error.InvalidDescriptorKind;
-                }
-            }
-
-            const binary_buf = try spirv_bin_dir.readFileAlloc(io, binary_file.binary_path, arena, .unlimited);
-
-            const shader = try Shader.init(
-                &self.gpu_device,
-                binary_buf.len * @sizeOf(u8),
-                binary_buf,
-                try arena.dupeSentinel(u8, entrypoint_name, 0),
-                stage,
-                descriptor_counts,
-            );
-
-            try self.shaders.put(binary_file.name, shader);
-        }
     }
 };
