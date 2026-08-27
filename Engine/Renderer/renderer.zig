@@ -10,7 +10,7 @@ pub const buf = @import("buffer.zig");
 pub const tex = @import("textures.zig");
 pub const dev = @import("gpu_device.zig");
 pub const cmd = @import("command_buffer.zig");
-pub const mesh = @import("mesh.zig");
+pub const msh = @import("mesh.zig");
 
 const sdlCheck = @import("C").sdlCheck;
 const sdlCheckBool = @import("C").sdlCheckBool;
@@ -36,32 +36,38 @@ const Matrices = struct {
     proj: la.Mat4,
 };
 
-/// all fields are internal so they shouldnt be accessed outside of Renderer's methods
 pub const Renderer = struct {
-    window: *win.Window,
-    swapchain_format: tex.TextureFormat,
+    /// readonly
     gpu_device: dev.GpuDevice,
+
+    /// internal
+    window: *win.Window,
+    /// internal
+    swapchain_format: tex.TextureFormat,
+    /// internal
     depth_tex: tex.Texture,
-    object: mesh.Mesh,
+    /// internal
     graphics_pipeline: *c.SDL_GPUGraphicsPipeline,
+    /// internal
     shaders: ShaderRegistry,
+    /// internal
+    draw_queue: std.Deque(msh.DrawCall),
 
     pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, window: *win.Window, gpu_driver: dev.GpuDriver, debug: bool, spirv_bin_dir_path: []const u8) !void {
         self.window = window;
 
-        self.gpu_device = try dev.GpuDevice.init(gpu_driver, debug, self.window);
+        self.draw_queue = .empty;
+
+        self.gpu_device = try .init(gpu_driver, debug, self.window);
 
         self.swapchain_format = try self.gpu_device.getSwapchainFormat(self.window);
 
         self.shaders = try ShaderRegistry.init(gpa);
         try sh.loadShaders(io, gpa, &self.shaders, &self.gpu_device, spirv_bin_dir_path);
 
-        self.object = undefined;
-        try self.object.init(&self.gpu_device, &mesh.cube_vertices, &mesh.cube_indices);
-
         const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
             .slot = 0,
-            .pitch = @sizeOf(mesh.Vertex),
+            .pitch = @sizeOf(msh.Vertex),
             .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
         };
 
@@ -167,19 +173,25 @@ pub const Renderer = struct {
         );
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
         c.SDL_ReleaseGPUGraphicsPipeline(self.gpu_device.sdl_gpu_device, self.graphics_pipeline);
 
         self.depth_tex.deinit(&self.gpu_device);
 
-        self.object.deinit(&self.gpu_device);
-
         self.shaders.deinit(&self.gpu_device);
+
+        self.draw_queue.deinit(gpa);
 
         self.gpu_device.deinit();
     }
 
-    pub fn render(self: *@This(), io: std.Io) !void {
+    /// queues up a draw call to be submitted during the render function
+    /// acquire a DrawCall from Mesh.drawCall
+    pub fn queueDrawCall(self: *@This(), gpa: std.mem.Allocator, draw_call: msh.DrawCall) !void {
+        try self.draw_queue.pushBack(gpa, draw_call);
+    }
+
+    pub fn render(self: *@This()) !void {
         var command_buffer = try cmd.CommandBuffer.acquire(&self.gpu_device);
 
         const swapchain_tex = try command_buffer.waitAndAcquireSwapchainTexture(&self.gpu_device, self.window);
@@ -220,8 +232,6 @@ pub const Renderer = struct {
             RendererError.FailedToBeginRenderPass,
         );
 
-        self.object.bind(render_pass);
-
         const viewport = c.SDL_GPUViewport{
             .x = 0,
             .y = 0,
@@ -237,22 +247,17 @@ pub const Renderer = struct {
         const f_width: f32 = @floatFromInt(self.window.width);
         const f_height: f32 = @floatFromInt(self.window.height);
 
-        const time = std.Io.Clock.awake.now(io);
-        const now: f32 = @floatFromInt(time.toMilliseconds());
+        while (self.draw_queue.popFront()) |draw_call| {
+            const matrices = Matrices{
+                .model = draw_call.model,
+                .view = try la.lookAt(.{ 0, 2, -3 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
+                .proj = la.perspective(f_width / f_height, std.math.degreesToRadians(60), 0.1, 100),
+            };
 
-        const matrices = Matrices{
-            .model = la.mulMat(
-                la.Mat4,
-                la.translate(.{ @sin(now / 400), 0, @cos(now / 400) + 2 }),
-                try la.rotate(.{ 0, 1, 0 }, now / 400),
-            ),
-            .view = try la.lookAt(.{ 0, 2, -3 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
-            .proj = la.perspective(f_width / f_height, std.math.degreesToRadians(60), 0.1, 100),
-        };
+            command_buffer.pushVertexUniformData(0, Matrices, &matrices);
 
-        command_buffer.pushVertexUniformData(0, Matrices, &matrices);
-
-        self.object.draw(render_pass);
+            draw_call.draw(render_pass);
+        }
 
         c.SDL_EndGPURenderPass(render_pass);
 
