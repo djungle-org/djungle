@@ -21,6 +21,8 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
+    c_module.linkSystemLibrary("SDL3", .{ .needed = true });
+
     const logging_module = b.addModule("Logging", .{
         .root_source_file = b.path("Logging/logging.zig"),
         .target = target,
@@ -75,23 +77,9 @@ pub fn build(b: *std.Build) !void {
     renderer_module.addImport("Window", window_module);
     renderer_module.addImport("Shaders", shaders_module);
 
-    const engine_module = b.addModule("Engine", .{
-        .root_source_file = b.path("engine.zig"),
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-    });
-
-    engine_module.addImport("Lalg", lalg_module);
-    engine_module.addImport("DeletionQueue", deletion_queue_module);
-    engine_module.addImport("Window", window_module);
-    engine_module.addImport("Renderer", renderer_module);
-
-    for ([_]*std.Build.Module{ window_module, renderer_module, engine_module, deletion_queue_module, c_module, shaders_module }) |m| {
+    for ([_]*std.Build.Module{ window_module, renderer_module, deletion_queue_module, c_module, shaders_module }) |m| {
         m.addImport("Logging", logging_module);
     }
-
-    engine_module.linkSystemLibrary("SDL3", .{ .needed = true });
 
     // shader compiler executable
 

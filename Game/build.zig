@@ -8,7 +8,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const engine_module = engine_dep.module("Engine");
+
+    const renderer_module = engine_dep.module("Renderer");
+    const lalg_module = engine_dep.module("Lalg");
+    const window_module = engine_dep.module("Window");
 
     const exe = b.addExecutable(.{
         .name = "game",
@@ -20,7 +23,9 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    exe.root_module.addImport("Engine", engine_module);
+    exe.root_module.addImport("Renderer", renderer_module);
+    exe.root_module.addImport("Lalg", lalg_module);
+    exe.root_module.addImport("Window", window_module);
 
     b.installArtifact(exe);
 
