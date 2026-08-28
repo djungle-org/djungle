@@ -173,25 +173,25 @@ pub const cube_indices = [_]u32{
 };
 
 // quad
-const quad_vertices = [_]Vertex{
-    .{ .pos = .{ -0.5, -0.5 }, .col = .{ 1.0, 0.0, 0.0 } },
-    .{ .pos = .{ 0.5, -0.5 }, .col = .{ 0.0, 1.0, 0.0 } },
-    .{ .pos = .{ 0.5, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
-    .{ .pos = .{ -0.5, 0.5 }, .col = .{ 0.33, 0.33, 0.33 } },
+pub const quad_vertices = [_]Vertex{
+    .{ .pos = .{ -0.5, -0.5, 0.0 }, .col = .{ 1.0, 0.0, 0.0 } },
+    .{ .pos = .{ 0.5, -0.5, 0.0 }, .col = .{ 0.0, 1.0, 0.0 } },
+    .{ .pos = .{ 0.5, 0.5, 0.0 }, .col = .{ 0.0, 0.0, 1.0 } },
+    .{ .pos = .{ -0.5, 0.5, 0.0 }, .col = .{ 0.33, 0.33, 0.33 } },
 };
 
-const quad_indices = [_]u32{
+pub const quad_indices = [_]u32{
     0, 1, 2,
     2, 3, 0,
 };
 
 // triangle
-const triangle_vertices = [_]Vertex{
-    .{ .pos = .{ -0.5, -0.5 }, .col = .{ 1.0, 0.0, 0.0 } },
-    .{ .pos = .{ 0.5, -0.5 }, .col = .{ 0.0, 1.0, 0.0 } },
-    .{ .pos = .{ 0.5, 0.5 }, .col = .{ 0.0, 0.0, 1.0 } },
+pub const triangle_vertices = [_]Vertex{
+    .{ .pos = .{ -0.5, -0.5, 0.0 }, .col = .{ 1.0, 0.0, 0.0 } },
+    .{ .pos = .{ 0.5, -0.5, 0.0 }, .col = .{ 0.0, 1.0, 0.0 } },
+    .{ .pos = .{ 0.5, 0.5, 0.0 }, .col = .{ 0.0, 0.0, 1.0 } },
 };
 
-const triangle_indices = [_]u32{
+pub const triangle_indices = [_]u32{
     0, 1, 2,
 };

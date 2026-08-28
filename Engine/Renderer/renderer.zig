@@ -30,7 +30,7 @@ pub const RendererError = error{
     FailedToAcquireSwapchainTexture,
 };
 
-const ViewProj = struct {
+pub const ViewProj = struct {
     view: la.Mat4,
     proj: la.Mat4,
 };
@@ -39,9 +39,13 @@ const Model = struct {
     model: la.Mat4,
 };
 
+const Seconds = f32;
+
 pub const Renderer = struct {
     /// readonly
     gpu_device: dev.GpuDevice,
+    /// readonly
+    delta_time: Seconds,
 
     /// internal
     window: *win.Window,
@@ -194,7 +198,7 @@ pub const Renderer = struct {
         try self.draw_queue.pushBack(gpa, draw_call);
     }
 
-    pub fn render(self: *@This()) !void {
+    pub fn render(self: *@This(), view_proj: *const ViewProj) !void {
         var command_buffer = try cmd.CommandBuffer.acquire(&self.gpu_device);
 
         const swapchain_tex = try command_buffer.waitAndAcquireSwapchainTexture(&self.gpu_device, self.window);
@@ -247,15 +251,7 @@ pub const Renderer = struct {
 
         c.SDL_BindGPUGraphicsPipeline(render_pass, self.graphics_pipeline);
 
-        const f_width: f32 = @floatFromInt(self.window.width);
-        const f_height: f32 = @floatFromInt(self.window.height);
-
-        const view_proj = ViewProj{
-            .view = try la.lookAt(.{ 0, 2, -3 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
-            .proj = la.perspective(f_width / f_height, std.math.degreesToRadians(60), 0.1, 100),
-        };
-
-        command_buffer.pushVertexUniformData(0, ViewProj, &view_proj);
+        command_buffer.pushVertexUniformData(0, ViewProj, view_proj);
 
         while (self.draw_queue.popFront()) |draw_call| {
             const model_mat = Model{
