@@ -32,7 +32,7 @@ pub fn main(init: std.process.Init) !void {
     defer cube.deinit(&renderer);
 
     const view_proj = eng.renderer.ViewProj{
-        .view = try eng.lalg.lookAt(.{ 0, 5, -10 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
+        .view = try eng.lalg.lookAt(.{ 0, 8, -16 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
         .proj = eng.lalg.perspective(width / height, std.math.degreesToRadians(60), 0.1, 100),
     };
 
@@ -44,8 +44,9 @@ pub fn main(init: std.process.Init) !void {
         const now: f32 = @floatFromInt(time.toMilliseconds());
 
         const model = eng.lalg.mulMat(.{
-            eng.lalg.translate(.{ 3 * @sin(now / 400), 0, 3 * @cos(now / 400) }),
-            try eng.lalg.rotate(.{ 0, 1, 0 }, now / 400),
+            eng.lalg.translate(.{ 6 * @sin(now / 600), 0, 6 * @cos(now / 600) }),
+            try eng.lalg.rotate(.{ 0, 1, 0 }, now / 600),
+            eng.lalg.scale(.{ 2, 2, 2 }),
         });
 
         var draw_call = cube.drawCall(model);
@@ -53,8 +54,25 @@ pub fn main(init: std.process.Init) !void {
         try renderer.queueDrawCall(gpa, draw_call);
 
         draw_call.model = eng.lalg.mulMat(.{
-            eng.lalg.translate(.{ @sin(now / 200), 0, @cos(now / 200) }),
+            eng.lalg.translate(.{ 4 * @sin(now / 400), 0, 4 * @cos(now / 400) }),
+            try eng.lalg.rotate(.{ 0, 1, 0 }, now / 400),
+            eng.lalg.scale(.{ 1, 1, 1 }),
+        });
+
+        try renderer.queueDrawCall(gpa, draw_call);
+
+        draw_call.model = eng.lalg.mulMat(.{
+            eng.lalg.translate(.{ 2 * @sin(now / 200), 0, 2 * @cos(now / 200) }),
             try eng.lalg.rotate(.{ 0, 1, 0 }, now / 200),
+            eng.lalg.scale(.{ 0.5, 0.5, 0.5 }),
+        });
+
+        try renderer.queueDrawCall(gpa, draw_call);
+
+        draw_call.model = eng.lalg.mulMat(.{
+            eng.lalg.translate(.{ @sin(now / 100), 0, @cos(now / 100) }),
+            try eng.lalg.rotate(.{ 0, 1, 0 }, now / 100),
+            eng.lalg.scale(.{ 0.25, 0.25, 0.25 }),
         });
 
         try renderer.queueDrawCall(gpa, draw_call);

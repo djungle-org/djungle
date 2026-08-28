@@ -338,17 +338,18 @@ pub fn mulMat(matrices: anytype) @typeInfo(@TypeOf(matrices)).@"struct".fields[0
     const MatrixType = fields[0].type;
     comptime assertMatrixType(fields[0].type);
 
-    var result: MatrixType = undefined;
+    var result = @field(matrices, fields[0].name);
 
-    inline for (0..fields.len - 1) |field_i| {
+    inline for (1..fields.len) |field_i| {
         if (fields[field_i].type != MatrixType)
             @compileError("all matrices must be of same matrix type, got " ++ @typeName(fields[field_i].type));
 
-        const mat1 = @field(matrices, fields[field_i].name);
-        const mat2 = @field(matrices, fields[field_i + 1].name);
+        const mat2 = @field(matrices, fields[field_i].name);
+
+        const result_snapshot = result;
 
         inline for (0..mat2.len) |i| {
-            result[i] = mulMatVec(MatrixType, mat1, mat2[i]);
+            result[i] = mulMatVec(MatrixType, result_snapshot, mat2[i]);
         }
     }
 
