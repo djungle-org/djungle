@@ -1,12 +1,17 @@
 import common;
 
-struct Matrices {
-  float4x4 model;
+struct ViewProj {
   float4x4 view;
   float4x4 proj;
 };
 [[vk_binding(0, 1)]]
-ConstantBuffer<Matrices> matrices;
+ConstantBuffer<ViewProj> viewProj;
+
+struct Model {
+  float4x4 model;
+};
+[[vk_binding(1, 1)]]
+ConstantBuffer<Model> model;
 
 struct VSInput {
   float3 pos;
@@ -18,8 +23,8 @@ struct VSInput {
 VSOutput vertMain(VSInput input) {
   VSOutput output;
   output.pos =
-      mul(matrices.proj,
-          mul(matrices.view, mul(matrices.model, float4(input.pos, 1.0))));
+      mul(viewProj.proj,
+          mul(viewProj.view, mul(model.model, float4(input.pos, 1.0))));
 
   output.col = input.col;
   // output.texCoord = input.texCoord;

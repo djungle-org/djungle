@@ -30,10 +30,13 @@ pub const RendererError = error{
     FailedToAcquireSwapchainTexture,
 };
 
-const Matrices = struct {
-    model: la.Mat4,
+const ViewProj = struct {
     view: la.Mat4,
     proj: la.Mat4,
+};
+
+const Model = struct {
+    model: la.Mat4,
 };
 
 pub const Renderer = struct {
@@ -247,14 +250,19 @@ pub const Renderer = struct {
         const f_width: f32 = @floatFromInt(self.window.width);
         const f_height: f32 = @floatFromInt(self.window.height);
 
+        const view_proj = ViewProj{
+            .view = try la.lookAt(.{ 0, 2, -3 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
+            .proj = la.perspective(f_width / f_height, std.math.degreesToRadians(60), 0.1, 100),
+        };
+
+        command_buffer.pushVertexUniformData(0, ViewProj, &view_proj);
+
         while (self.draw_queue.popFront()) |draw_call| {
-            const matrices = Matrices{
+            const model_mat = Model{
                 .model = draw_call.model,
-                .view = try la.lookAt(.{ 0, 2, -3 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
-                .proj = la.perspective(f_width / f_height, std.math.degreesToRadians(60), 0.1, 100),
             };
 
-            command_buffer.pushVertexUniformData(0, Matrices, &matrices);
+            command_buffer.pushVertexUniformData(1, Model, &model_mat);
 
             draw_call.draw(render_pass);
         }
