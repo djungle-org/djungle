@@ -332,13 +332,24 @@ test "matrix-vector multiply" {
     try std.testing.expectEqual(Vec4{ 46, 32, 60, 87 }, res);
 }
 
-pub fn mulMat(comptime MatrixType: type, mat1: MatrixType, mat2: MatrixType) MatrixType {
-    comptime assertMatrixType(MatrixType);
+/// matrices is a tuple of matrices to multiply
+pub fn mulMat(matrices: anytype) @typeInfo(@TypeOf(matrices)).@"struct".fields[0].type {
+    const fields = @typeInfo(@TypeOf(matrices)).@"struct".fields;
+    const MatrixType = fields[0].type;
+    comptime assertMatrixType(fields[0].type);
 
     var result: MatrixType = undefined;
 
-    inline for (0..mat2.len) |i| {
-        result[i] = mulMatVec(MatrixType, mat1, mat2[i]);
+    inline for (0..fields.len - 1) |field_i| {
+        if (fields[field_i].type != MatrixType)
+            @compileError("all matrices must be of same matrix type, got " ++ @typeName(fields[field_i].type));
+
+        const mat1 = @field(matrices, fields[field_i].name);
+        const mat2 = @field(matrices, fields[field_i + 1].name);
+
+        inline for (0..mat2.len) |i| {
+            result[i] = mulMatVec(MatrixType, mat1, mat2[i]);
+        }
     }
 
     return result;
@@ -429,7 +440,7 @@ pub fn rotate(axis: Vec3, radians: f32) !Mat4 {
         .{ -axis_n[1], axis_n[0], 0 },
     });
 
-    const axis_mat_sqr = mulMat(Mat3, axis_mat, axis_mat);
+    const axis_mat_sqr = mulMat(.{ axis_mat, axis_mat });
 
     const identity = identityMat(Mat3);
     const sin = mulMatScalar(Mat3, axis_mat, @sin(radians));
@@ -500,7 +511,7 @@ pub fn lookAt(eye: Vec3, target: Vec3, world_up: Vec3) !Mat4 {
         .{ 0, 0, 0, 1 },
     });
 
-    return mulMat(Mat4, translation, rotation);
+    return mulMat(.{ translation, rotation });
 }
 
 test "matrix lookAt" {

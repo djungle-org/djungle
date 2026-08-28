@@ -13,6 +13,7 @@ pub const Vertex = struct {
 };
 
 /// initialized with the drawCall function in a Mesh
+/// can be reused with new model matrices for multiple draw calls
 pub const DrawCall = struct {
     model: la.Mat4,
 

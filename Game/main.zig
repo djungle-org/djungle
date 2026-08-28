@@ -31,12 +31,8 @@ pub fn main(init: std.process.Init) !void {
     try cube.init(&renderer, &eng.renderer.msh.cube_vertices, &eng.renderer.msh.cube_indices);
     defer cube.deinit(&renderer);
 
-    var cube2: eng.renderer.msh.Mesh = undefined;
-    try cube2.init(&renderer, &eng.renderer.msh.cube_vertices, &eng.renderer.msh.cube_indices);
-    defer cube2.deinit(&renderer);
-
     const view_proj = eng.renderer.ViewProj{
-        .view = try eng.lalg.lookAt(.{ 0, 4, -8 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
+        .view = try eng.lalg.lookAt(.{ 0, 5, -10 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
         .proj = eng.lalg.perspective(width / height, std.math.degreesToRadians(60), 0.1, 100),
     };
 
@@ -47,21 +43,21 @@ pub fn main(init: std.process.Init) !void {
         const time = std.Io.Clock.awake.now(io);
         const now: f32 = @floatFromInt(time.toMilliseconds());
 
-        var model = eng.lalg.mulMat(
-            eng.lalg.Mat4,
+        const model = eng.lalg.mulMat(.{
             eng.lalg.translate(.{ 3 * @sin(now / 400), 0, 3 * @cos(now / 400) }),
             try eng.lalg.rotate(.{ 0, 1, 0 }, now / 400),
-        );
+        });
 
-        try renderer.queueDrawCall(gpa, cube.drawCall(model));
+        var draw_call = cube.drawCall(model);
 
-        model = eng.lalg.mulMat(
-            eng.lalg.Mat4,
+        try renderer.queueDrawCall(gpa, draw_call);
+
+        draw_call.model = eng.lalg.mulMat(.{
             eng.lalg.translate(.{ @sin(now / 200), 0, @cos(now / 200) }),
             try eng.lalg.rotate(.{ 0, 1, 0 }, now / 200),
-        );
+        });
 
-        try renderer.queueDrawCall(gpa, cube2.drawCall(model));
+        try renderer.queueDrawCall(gpa, draw_call);
 
         try renderer.render(&view_proj);
     }
