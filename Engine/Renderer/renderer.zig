@@ -169,7 +169,7 @@ pub const Renderer = struct {
         self.dirt_texture = try tex.Texture.init(
             &self.gpu_device,
             ._2d,
-            .R8G8B8A8_Srgb,
+            .R8G8B8A8_Unorm,
             .{ .sampler = true },
             image.width,
             image.height,
