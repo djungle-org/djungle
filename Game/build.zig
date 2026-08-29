@@ -4,11 +4,13 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // contains engine modules
     const engine_dep = b.dependency("Engine", .{
         .target = target,
         .optimize = optimize,
     });
 
+    // grab whatever engine modules you need for your project
     const renderer_module = engine_dep.module("Renderer");
     const lalg_module = engine_dep.module("Lalg");
     const window_module = engine_dep.module("Window");
@@ -29,27 +31,8 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
-    // const exe_check = b.addExecutable(.{
-    //     .name = "game",
-    //     .root_module = b.createModule(.{
-    //         .root_source_file = b.path("main.zig"),
-    //         .target = target,
-    //         .optimize = optimize,
-    //         .link_libc = true,
-    //     }),
-    // });
-    //
-    // exe_check.root_module.addImport("Engine", engine_module);
-    //
-    // const check = b.step("check", "Check if game compiles");
-    // check.dependOn(&exe_check.step);
-
+    // this section is needed in order to automatically compile shaders at build time
     const compiled_shaders = engine_dep.namedLazyPath("compiled_shaders");
-    // b.getInstallStep().dependOn(&b.addInstallDirectory(.{
-    //     .source_dir = compiled_shaders,
-    //     .install_dir = .{ .custom = "Shaders" },
-    //     .install_subdir = "",
-    // }).step);
 
     const compile_shaders_step = &b.addInstallDirectory(.{
         .source_dir = compiled_shaders,

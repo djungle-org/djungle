@@ -7,6 +7,7 @@ const la = @import("Lalg");
 const sh = @import("Shaders");
 
 pub const buf = @import("buffer.zig");
+pub const img = @import("image.zig");
 pub const tex = @import("textures.zig");
 pub const dev = @import("gpu_device.zig");
 pub const cmd = @import("command_buffer.zig");
@@ -28,6 +29,7 @@ pub const RendererError = error{
     FailedToCreateGpuGraphicsPipeline,
     FailedToBeginRenderPass,
     FailedToAcquireSwapchainTexture,
+    FailedToCreateGpuSampler,
 };
 
 pub const ViewProj = struct {
@@ -60,6 +62,9 @@ pub const Renderer = struct {
     /// internal
     draw_queue: std.Deque(msh.DrawCall),
 
+    dirt_texture: tex.Texture,
+    sampler: *c.SDL_GPUSampler,
+
     pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, window: *win.Window, gpu_driver: dev.GpuDriver, debug: bool, spirv_bin_dir_path: []const u8) !void {
         self.window = window;
 
@@ -71,27 +76,6 @@ pub const Renderer = struct {
 
         self.shaders = try ShaderRegistry.init(gpa);
         try sh.loadShaders(io, gpa, &self.shaders, &self.gpu_device, spirv_bin_dir_path);
-
-        const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
-            .slot = 0,
-            .pitch = @sizeOf(msh.Vertex),
-            .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
-        };
-
-        const vertex_attribs = [_]c.SDL_GPUVertexAttribute{
-            .{ // pos
-                .location = 0,
-                .buffer_slot = 0,
-                .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-                .offset = 0,
-            },
-            .{ // col
-                .location = 1,
-                .buffer_slot = 0,
-                .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-                .offset = @sizeOf(la.Vec2),
-            },
-        };
 
         self.depth_tex = try tex.Texture.init(
             &self.gpu_device,
@@ -125,9 +109,9 @@ pub const Renderer = struct {
             .fragment_shader = frag_shader.sdl_gpu_shader,
             .vertex_input_state = .{
                 .num_vertex_buffers = 1,
-                .vertex_buffer_descriptions = &vertex_buf_description,
-                .num_vertex_attributes = vertex_attribs.len,
-                .vertex_attributes = &vertex_attribs,
+                .vertex_buffer_descriptions = &msh.vertex_buf_description,
+                .num_vertex_attributes = msh.vertex_attribs.len,
+                .vertex_attributes = &msh.vertex_attribs,
             },
             .primitive_type = c.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
             .rasterizer_state = .{
@@ -178,9 +162,59 @@ pub const Renderer = struct {
             c.SDL_CreateGPUGraphicsPipeline(self.gpu_device.sdl_gpu_device, &gfx_pipeline_info),
             RendererError.FailedToCreateGpuGraphicsPipeline,
         );
+
+        var image = try img.Image.init("../Assets/minecraft_dirt.png");
+        defer image.deinit();
+
+        self.dirt_texture = try tex.Texture.init(
+            &self.gpu_device,
+            ._2d,
+            .R8G8B8A8_Srgb,
+            .{ .sampler = true },
+            image.width,
+            image.height,
+            ._1,
+        );
+
+        var cmd_buf = try cmd.CommandBuffer.acquire(&self.gpu_device);
+
+        const copy_pass = try cmd_buf.beginCopyPass();
+
+        try self.dirt_texture.upload(&self.gpu_device, copy_pass, &image);
+
+        c.SDL_EndGPUCopyPass(copy_pass);
+
+        const sampler_info = c.SDL_GPUSamplerCreateInfo{
+            .min_filter = c.SDL_GPU_FILTER_NEAREST,
+            .mag_filter = c.SDL_GPU_FILTER_NEAREST,
+            .mipmap_mode = c.SDL_GPU_SAMPLERMIPMAPMODE_LINEAR,
+            .address_mode_u = c.SDL_GPU_SAMPLERADDRESSMODE_REPEAT,
+            .address_mode_v = c.SDL_GPU_SAMPLERADDRESSMODE_REPEAT,
+            .address_mode_w = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+            .mip_lod_bias = 0,
+            .enable_anisotropy = false,
+            .max_anisotropy = 0,
+            .enable_compare = false,
+            .compare_op = c.SDL_GPU_COMPAREOP_ALWAYS,
+            .min_lod = 0,
+            .max_lod = 0,
+        };
+
+        try cmd_buf.submit();
+
+        self.sampler = try sdlCheck(
+            @src(),
+            *c.SDL_GPUSampler,
+            c.SDL_CreateGPUSampler(self.gpu_device.sdl_gpu_device, &sampler_info),
+            RendererError.FailedToCreateGpuSampler,
+        );
     }
 
     pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+        c.SDL_ReleaseGPUSampler(self.gpu_device.sdl_gpu_device, self.sampler);
+
+        self.dirt_texture.deinit(&self.gpu_device);
+
         c.SDL_ReleaseGPUGraphicsPipeline(self.gpu_device.sdl_gpu_device, self.graphics_pipeline);
 
         self.depth_tex.deinit(&self.gpu_device);
@@ -252,6 +286,13 @@ pub const Renderer = struct {
         c.SDL_BindGPUGraphicsPipeline(render_pass, self.graphics_pipeline);
 
         command_buffer.pushVertexUniformData(0, ViewProj, view_proj);
+
+        const sampler_binding = c.SDL_GPUTextureSamplerBinding{
+            .texture = self.dirt_texture.sdl_texture,
+            .sampler = self.sampler,
+        };
+
+        c.SDL_BindGPUFragmentSamplers(render_pass, 0, &sampler_binding, 1);
 
         while (self.draw_queue.popFront()) |draw_call| {
             const model_mat = Model{

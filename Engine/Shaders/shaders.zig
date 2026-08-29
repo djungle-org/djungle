@@ -8,6 +8,8 @@ pub const ShaderError = error{
     FailedToCreateGpuShader,
     ShaderCompileFailed,
     FailedToGetShaderFromRegistry,
+    InvalidShaderStage,
+    InvalidDescriptorKind,
 };
 
 /// stage 1 of shader creation
@@ -200,7 +202,7 @@ pub fn loadShaders(io: std.Io, allocator: std.mem.Allocator, registry: *ShaderRe
         else if (std.mem.eql(u8, stage_name, "fragment"))
             .Fragment
         else
-            return error.InvalidShaderStage;
+            return ShaderError.InvalidShaderStage;
 
         const parameters = parsed.value.object.get("parameters").?.array.items;
 
@@ -216,8 +218,10 @@ pub fn loadShaders(io: std.Io, allocator: std.mem.Allocator, registry: *ShaderRe
 
             if (std.mem.eql(u8, kind, "constantBuffer")) {
                 descriptor_counts.uniform_buffers += 1;
+            } else if (std.mem.eql(u8, kind, "resource")) {
+                descriptor_counts.samplers += 1;
             } else {
-                return error.InvalidDescriptorKind;
+                return ShaderError.InvalidDescriptorKind;
             }
         }
 

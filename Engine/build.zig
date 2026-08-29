@@ -21,6 +21,11 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
+    c_module.addIncludePath(b.path("Vendor"));
+    c_module.addCSourceFile(.{
+        .file = b.path("Vendor/stb_image_impl.c"),
+    });
+
     c_module.linkSystemLibrary("SDL3", .{ .needed = true });
 
     const logging_module = b.addModule("Logging", .{

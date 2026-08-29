@@ -1,6 +1,8 @@
 const std = @import("std");
 const c = @import("C").c;
 const log = @import("Logging");
+const img = @import("image.zig");
+const buf = @import("buffer.zig");
 
 const sdlCheck = @import("C").sdlCheck;
 const GpuDevice = @import("gpu_device.zig").GpuDevice;
@@ -161,10 +163,32 @@ pub const Texture = struct {
         c.SDL_ReleaseGPUTexture(gpu_device.sdl_gpu_device, self.sdl_texture);
     }
 
-    /// needs to be implemented
-    pub fn upload(self: *@This(), gpu_device: *GpuDevice) void {
-        _ = self;
-        _ = gpu_device;
+    pub fn upload(self: *@This(), gpu_device: *GpuDevice, copy_pass: *c.SDL_GPUCopyPass, image: *const img.Image) !void {
+        var transfer = try buf.transfer.Upload.init(gpu_device, @sizeOf(u8) * image.pixels.len);
+        defer transfer.deinit(gpu_device);
+
+        try transfer.upload(gpu_device, u8, image.pixels);
+
+        const transfer_info = c.SDL_GPUTextureTransferInfo{
+            .transfer_buffer = transfer.sdl_transfer_buffer,
+            .offset = 0,
+            .pixels_per_row = image.width,
+            .rows_per_layer = image.height,
+        };
+
+        const dest = c.SDL_GPUTextureRegion{
+            .texture = self.sdl_texture,
+            .mip_level = 0,
+            .layer = 0,
+            .x = 0,
+            .y = 0,
+            .z = 0,
+            .w = image.width,
+            .h = image.height,
+            .d = 1,
+        };
+
+        c.SDL_UploadToGPUTexture(copy_pass, &transfer_info, &dest, true);
     }
 };
 
