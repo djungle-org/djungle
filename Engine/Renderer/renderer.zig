@@ -12,6 +12,7 @@ pub const tex = @import("textures.zig");
 pub const dev = @import("gpu_device.zig");
 pub const cmd = @import("command_buffer.zig");
 pub const msh = @import("mesh.zig");
+pub const mdl = @import("model.zig");
 
 const sdlCheck = @import("C").sdlCheck;
 const sdlCheckBool = @import("C").sdlCheckBool;
@@ -37,11 +38,56 @@ pub const ViewProj = struct {
     proj: la.Mat4,
 };
 
-const Model = struct {
+const ModelMatrix = struct {
     model: la.Mat4,
 };
 
 const Seconds = f32;
+
+pub const PathKind = enum {
+    Assets,
+    ShaderBinaries,
+};
+
+pub const PathResolver = struct {
+    /// readonly
+    assets_path: [:0]const u8,
+    /// readonly
+    shader_bins_path: [:0]const u8,
+
+    pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
+        const exe_dir_path = try std.process.executableDirPathAlloc(io, gpa);
+        defer gpa.free(exe_dir_path);
+
+        const assets_path = try std.Io.Dir.path.join(gpa, &.{ exe_dir_path, "../../../Assets" });
+        defer gpa.free(assets_path);
+
+        const shader_bins_path = try std.Io.Dir.path.join(gpa, &.{ exe_dir_path, "../Shaders" });
+        defer gpa.free(shader_bins_path);
+
+        return .{
+            .assets_path = try gpa.dupeSentinel(u8, assets_path, 0),
+            .shader_bins_path = try gpa.dupeSentinel(u8, shader_bins_path, 0),
+        };
+    }
+
+    pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+        gpa.free(self.assets_path);
+        gpa.free(self.shader_bins_path);
+    }
+
+    /// kind: Assets will find path relative to assets folder, ShaderBinaries will find path relative to zig-out shaders folder
+    pub fn resolvePath(self: *@This(), gpa: std.mem.Allocator, kind: PathKind, relative: []const u8) ![:0]const u8 {
+        const joined: []u8 = switch (kind) {
+            .Assets => try std.Io.Dir.path.join(gpa, &.{ self.assets_path, relative }),
+            .ShaderBinaries => try std.Io.Dir.path.join(gpa, &.{ self.shader_bins_path, relative }),
+        };
+
+        defer gpa.free(joined);
+
+        return try gpa.dupeSentinel(u8, joined, 0);
+    }
+};
 
 pub const Renderer = struct {
     /// readonly
@@ -61,21 +107,30 @@ pub const Renderer = struct {
     shaders: ShaderRegistry,
     /// internal
     draw_queue: std.Deque(msh.DrawCall),
+    /// internal
+    model_loader: mdl.ModelLoader,
 
-    dirt_texture: tex.Texture,
-    sampler: *c.SDL_GPUSampler,
-
-    pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, window: *win.Window, gpu_driver: dev.GpuDriver, debug: bool, spirv_bin_dir_path: []const u8) !void {
+    pub fn init(
+        self: *@This(),
+        gpa: std.mem.Allocator,
+        io: std.Io,
+        window: *win.Window,
+        gpu_driver: dev.GpuDriver,
+        debug: bool,
+        path_resolver: PathResolver,
+    ) !void {
         self.window = window;
 
         self.draw_queue = .empty;
+        self.model_loader = try .init(gpa);
 
         self.gpu_device = try .init(gpu_driver, debug, self.window);
 
         self.swapchain_format = try self.gpu_device.getSwapchainFormat(self.window);
 
         self.shaders = try ShaderRegistry.init(gpa);
-        try sh.loadShaders(io, gpa, &self.shaders, &self.gpu_device, spirv_bin_dir_path);
+
+        try sh.loadShaders(io, gpa, &self.shaders, &self.gpu_device, path_resolver.shader_bins_path);
 
         self.depth_tex = try tex.Texture.init(
             &self.gpu_device,
@@ -163,27 +218,6 @@ pub const Renderer = struct {
             RendererError.FailedToCreateGpuGraphicsPipeline,
         );
 
-        var image = try img.Image.init("../Assets/minecraft_dirt.png");
-        defer image.deinit();
-
-        self.dirt_texture = try tex.Texture.init(
-            &self.gpu_device,
-            ._2d,
-            .R8G8B8A8_Unorm,
-            .{ .sampler = true },
-            image.width,
-            image.height,
-            ._1,
-        );
-
-        var cmd_buf = try cmd.CommandBuffer.acquire(&self.gpu_device);
-
-        const copy_pass = try cmd_buf.beginCopyPass();
-
-        try self.dirt_texture.upload(&self.gpu_device, copy_pass, &image);
-
-        c.SDL_EndGPUCopyPass(copy_pass);
-
         const sampler_info = c.SDL_GPUSamplerCreateInfo{
             .min_filter = c.SDL_GPU_FILTER_NEAREST,
             .mag_filter = c.SDL_GPU_FILTER_NEAREST,
@@ -199,8 +233,6 @@ pub const Renderer = struct {
             .min_lod = 0,
             .max_lod = 0,
         };
-
-        try cmd_buf.submit();
 
         self.sampler = try sdlCheck(
             @src(),
@@ -220,6 +252,8 @@ pub const Renderer = struct {
         self.depth_tex.deinit(&self.gpu_device);
 
         self.shaders.deinit(&self.gpu_device);
+
+        self.model_loader.deinit();
 
         self.draw_queue.deinit(gpa);
 
@@ -295,11 +329,11 @@ pub const Renderer = struct {
         c.SDL_BindGPUFragmentSamplers(render_pass, 0, &sampler_binding, 1);
 
         while (self.draw_queue.popFront()) |draw_call| {
-            const model_mat = Model{
+            const model_mat = ModelMatrix{
                 .model = draw_call.model,
             };
 
-            command_buffer.pushVertexUniformData(1, Model, &model_mat);
+            command_buffer.pushVertexUniformData(1, ModelMatrix, &model_mat);
 
             draw_call.draw(render_pass);
         }
