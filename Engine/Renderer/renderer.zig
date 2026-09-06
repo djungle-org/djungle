@@ -236,7 +236,7 @@ pub const Renderer = struct {
 
         self.shaders.deinit(&self.gpu_device);
 
-        self.material_cache.deinit(gpa, &self.gpu_device);
+        self.material_cache.deinit(gpa, self);
 
         self.draw_queue.deinit(gpa);
 

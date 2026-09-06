@@ -48,11 +48,11 @@ pub const MaterialCache = struct {
         };
     }
 
-    pub fn deinit(self: *@This(), gpa: std.mem.Allocator, gpu_device: *dev.GpuDevice) void {
+    pub fn deinit(self: *@This(), gpa: std.mem.Allocator, renderer: *rdr.Renderer) void {
         var iter = self.loaded_materials.valueIterator();
 
         while (iter.next()) |mat_ptr| {
-            mat_ptr.*.deinit(gpu_device);
+            mat_ptr.*.deinit(renderer);
             gpa.destroy(mat_ptr.*);
         }
 

@@ -69,8 +69,37 @@ pub const Material = struct {
         };
     }
 
-    pub fn deinit(self: *@This(), gpu_device: *dev.GpuDevice) void {
-        self.texture.deinit(gpu_device);
+    pub fn createFromFile(renderer: *rdr.Renderer, path: [:0]const u8, texture_format: tex.TextureFormat) !@This() {
+        var image = try rdr.img.Image.init(path);
+        defer image.deinit();
+
+        var texture = try tex.Texture.init(
+            &renderer.gpu_device,
+            ._2d,
+            texture_format,
+            .{ .sampler = true },
+            .{},
+            image.width,
+            image.height,
+            ._1,
+        );
+
+        var cmd_buf = try cmd.CommandBuffer.acquire(&renderer.gpu_device);
+        const copy_pass = try cmd_buf.beginCopyPass();
+
+        try texture.upload(&renderer.gpu_device, copy_pass, &image);
+
+        c.SDL_EndGPUCopyPass(copy_pass);
+
+        try cmd_buf.submit();
+
+        return .{
+            .texture = texture,
+        };
+    }
+
+    pub fn deinit(self: *@This(), renderer: *rdr.Renderer) void {
+        self.texture.deinit(&renderer.gpu_device);
     }
 };
 
