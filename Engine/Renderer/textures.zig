@@ -103,6 +103,50 @@ pub const TextureUsage = packed struct {
     }
 };
 
+pub const SamplerError = error{
+    FailedToCreate,
+    NoSamplerCreateInfoForSamplerTexture,
+};
+
+pub const SamplerCreateInfo = struct {};
+
+const Sampler = struct {
+    sdl_sampler: *c.SDL_GPUSampler,
+
+    pub fn init(gpu_device: *GpuDevice, create_info: SamplerCreateInfo) !@This() {
+        _ = create_info;
+
+        const sampler_info = c.SDL_GPUSamplerCreateInfo{
+            .min_filter = c.SDL_GPU_FILTER_NEAREST,
+            .mag_filter = c.SDL_GPU_FILTER_NEAREST,
+            .mipmap_mode = c.SDL_GPU_SAMPLERMIPMAPMODE_LINEAR,
+            .address_mode_u = c.SDL_GPU_SAMPLERADDRESSMODE_REPEAT,
+            .address_mode_v = c.SDL_GPU_SAMPLERADDRESSMODE_REPEAT,
+            .address_mode_w = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+            .mip_lod_bias = 0,
+            .enable_anisotropy = false,
+            .max_anisotropy = 0,
+            .enable_compare = false,
+            .compare_op = c.SDL_GPU_COMPAREOP_ALWAYS,
+            .min_lod = 0,
+            .max_lod = 0,
+        };
+
+        return .{
+            .sdl_sampler = try sdlCheck(
+                @src(),
+                *c.SDL_GPUSampler,
+                c.SDL_CreateGPUSampler(gpu_device.sdl_gpu_device, &sampler_info),
+                SamplerError.FailedToCreate,
+            ),
+        };
+    }
+
+    pub fn deinit(self: *@This(), gpu_device: *GpuDevice) void {
+        c.SDL_ReleaseGPUSampler(gpu_device.sdl_gpu_device, self.sdl_sampler);
+    }
+};
+
 pub const Texture = struct {
     /// read only
     sdl_texture: *c.SDL_GPUTexture,
@@ -116,13 +160,17 @@ pub const Texture = struct {
     format: TextureFormat,
     /// readonly
     usage: TextureUsage,
+    /// readonly, will only be created if usage is sampler
+    sampler: ?Sampler,
 
     /// sampler + graphics_storage_read or compute_storage_read is invalid and will return an error
+    /// ONLY SEND IN SAMPLER CREATE INFO IF SAMPLER USAGE IS ENABLED
     pub fn init(
         gpu_device: *GpuDevice,
         tex_type: TextureType,
         format: TextureFormat,
         usage: TextureUsage,
+        sampler_create_info: ?SamplerCreateInfo,
         width: u32,
         height: u32,
         sample_count: SampleCount,
@@ -130,6 +178,8 @@ pub const Texture = struct {
         if (usage.sampler and (usage.graphics_storage_read or usage.compute_storage_read)) {
             return TextureError.InvalidTextureUsageCombination;
         }
+
+        if (usage.sampler and sampler_create_info == null) return SamplerError.NoSamplerCreateInfoForSamplerTexture;
 
         const gpu_tex_info = c.SDL_GPUTextureCreateInfo{
             .type = tex_type.toSdl(),
@@ -157,12 +207,15 @@ pub const Texture = struct {
             .tex_type = tex_type,
             .format = format,
             .usage = usage,
+            .sampler = if (usage.sampler) try Sampler.init(gpu_device, sampler_create_info.?) else null,
             .width = width,
             .height = height,
         };
     }
 
     pub fn deinit(self: *@This(), gpu_device: *GpuDevice) void {
+        if (self.sampler) |*sampler| sampler.deinit(gpu_device);
+
         c.SDL_ReleaseGPUTexture(gpu_device.sdl_gpu_device, self.sdl_texture);
     }
 

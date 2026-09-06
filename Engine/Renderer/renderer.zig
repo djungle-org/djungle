@@ -30,7 +30,6 @@ pub const RendererError = error{
     FailedToCreateGpuGraphicsPipeline,
     FailedToBeginRenderPass,
     FailedToAcquireSwapchainTexture,
-    FailedToCreateGpuSampler,
 };
 
 pub const ViewProj = struct {
@@ -71,18 +70,27 @@ pub const PathResolver = struct {
         };
     }
 
-    pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+    pub fn deinit(self: *const @This(), gpa: std.mem.Allocator) void {
         gpa.free(self.assets_path);
         gpa.free(self.shader_bins_path);
     }
 
     /// kind: Assets will find path relative to assets folder, ShaderBinaries will find path relative to zig-out shaders folder
-    pub fn resolvePath(self: *@This(), gpa: std.mem.Allocator, kind: PathKind, relative: []const u8) ![:0]const u8 {
+    /// returned slice is owned by the caller
+    pub fn resolvePath(self: *const @This(), gpa: std.mem.Allocator, kind: PathKind, relative: []const u8) ![:0]const u8 {
         const joined: []u8 = switch (kind) {
             .Assets => try std.Io.Dir.path.join(gpa, &.{ self.assets_path, relative }),
             .ShaderBinaries => try std.Io.Dir.path.join(gpa, &.{ self.shader_bins_path, relative }),
         };
 
+        defer gpa.free(joined);
+
+        return try gpa.dupeSentinel(u8, joined, 0);
+    }
+
+    /// returned slice is owned by the caller
+    pub fn combine(_: *const @This(), gpa: std.mem.Allocator, absolute: []const u8, relative: []const u8) ![:0]const u8 {
+        const joined = try std.Io.Dir.path.join(gpa, &.{ absolute, relative });
         defer gpa.free(joined);
 
         return try gpa.dupeSentinel(u8, joined, 0);
@@ -108,7 +116,7 @@ pub const Renderer = struct {
     /// internal
     draw_queue: std.Deque(msh.DrawCall),
     /// internal
-    model_loader: mdl.ModelLoader,
+    material_cache: mdl.MaterialCache,
 
     pub fn init(
         self: *@This(),
@@ -117,12 +125,12 @@ pub const Renderer = struct {
         window: *win.Window,
         gpu_driver: dev.GpuDriver,
         debug: bool,
-        path_resolver: PathResolver,
+        path_resolver: *const PathResolver,
     ) !void {
         self.window = window;
 
         self.draw_queue = .empty;
-        self.model_loader = try .init(gpa);
+        self.material_cache = try .init(gpa);
 
         self.gpu_device = try .init(gpu_driver, debug, self.window);
 
@@ -137,6 +145,7 @@ pub const Renderer = struct {
             ._2d,
             .D32_Float,
             .{ .depth_stencil_target = true },
+            null,
             window.width,
             window.height,
             ._1,
@@ -217,35 +226,10 @@ pub const Renderer = struct {
             c.SDL_CreateGPUGraphicsPipeline(self.gpu_device.sdl_gpu_device, &gfx_pipeline_info),
             RendererError.FailedToCreateGpuGraphicsPipeline,
         );
-
-        const sampler_info = c.SDL_GPUSamplerCreateInfo{
-            .min_filter = c.SDL_GPU_FILTER_NEAREST,
-            .mag_filter = c.SDL_GPU_FILTER_NEAREST,
-            .mipmap_mode = c.SDL_GPU_SAMPLERMIPMAPMODE_LINEAR,
-            .address_mode_u = c.SDL_GPU_SAMPLERADDRESSMODE_REPEAT,
-            .address_mode_v = c.SDL_GPU_SAMPLERADDRESSMODE_REPEAT,
-            .address_mode_w = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-            .mip_lod_bias = 0,
-            .enable_anisotropy = false,
-            .max_anisotropy = 0,
-            .enable_compare = false,
-            .compare_op = c.SDL_GPU_COMPAREOP_ALWAYS,
-            .min_lod = 0,
-            .max_lod = 0,
-        };
-
-        self.sampler = try sdlCheck(
-            @src(),
-            *c.SDL_GPUSampler,
-            c.SDL_CreateGPUSampler(self.gpu_device.sdl_gpu_device, &sampler_info),
-            RendererError.FailedToCreateGpuSampler,
-        );
     }
 
     pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
-        c.SDL_ReleaseGPUSampler(self.gpu_device.sdl_gpu_device, self.sampler);
-
-        self.dirt_texture.deinit(&self.gpu_device);
+        // c.SDL_ReleaseGPUSampler(self.gpu_device.sdl_gpu_device, self.sampler);
 
         c.SDL_ReleaseGPUGraphicsPipeline(self.gpu_device.sdl_gpu_device, self.graphics_pipeline);
 
@@ -253,7 +237,7 @@ pub const Renderer = struct {
 
         self.shaders.deinit(&self.gpu_device);
 
-        self.model_loader.deinit();
+        self.material_cache.deinit(gpa, &self.gpu_device);
 
         self.draw_queue.deinit(gpa);
 
@@ -321,19 +305,19 @@ pub const Renderer = struct {
 
         command_buffer.pushVertexUniformData(0, ViewProj, view_proj);
 
-        const sampler_binding = c.SDL_GPUTextureSamplerBinding{
-            .texture = self.dirt_texture.sdl_texture,
-            .sampler = self.sampler,
-        };
-
-        c.SDL_BindGPUFragmentSamplers(render_pass, 0, &sampler_binding, 1);
-
         while (self.draw_queue.popFront()) |draw_call| {
             const model_mat = ModelMatrix{
                 .model = draw_call.model,
             };
 
             command_buffer.pushVertexUniformData(1, ModelMatrix, &model_mat);
+
+            const sampler_binding = c.SDL_GPUTextureSamplerBinding{
+                .texture = draw_call.material.texture.sdl_texture,
+                .sampler = draw_call.material.texture.sampler.?.sdl_sampler,
+            };
+
+            c.SDL_BindGPUFragmentSamplers(render_pass, 0, &sampler_binding, 1);
 
             draw_call.draw(render_pass);
         }

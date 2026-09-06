@@ -6,11 +6,13 @@ const rdr = @import("renderer.zig");
 const buf = @import("buffer.zig");
 const dev = @import("gpu_device.zig");
 const cmd = @import("command_buffer.zig");
+const tex = @import("textures.zig");
 
 pub const Vertex = struct {
     pos: la.Vec3,
     col: la.Vec3,
     uv: la.Vec2,
+    // normal: la.Vec3,
 };
 
 pub const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
@@ -44,6 +46,7 @@ pub const vertex_attribs = [_]c.SDL_GPUVertexAttribute{
 /// can be reused with new model matrices for multiple draw calls
 pub const DrawCall = struct {
     model: la.Mat4,
+    material: *const Material,
 
     vertex_buf_binding: c.SDL_GPUBufferBinding,
     index_buf_binding: c.SDL_GPUBufferBinding,
@@ -54,6 +57,20 @@ pub const DrawCall = struct {
         c.SDL_BindGPUIndexBuffer(render_pass, &self.index_buf_binding, c.SDL_GPU_INDEXELEMENTSIZE_32BIT);
 
         c.SDL_DrawGPUIndexedPrimitives(render_pass, self.index_count, 1, 0, 0, 0);
+    }
+};
+
+pub const Material = struct {
+    texture: tex.Texture,
+
+    pub fn init(texture: tex.Texture) !@This() {
+        return .{
+            .texture = texture,
+        };
+    }
+
+    pub fn deinit(self: *@This(), gpu_device: *dev.GpuDevice) void {
+        self.texture.deinit(gpu_device);
     }
 };
 
@@ -68,9 +85,13 @@ pub const Mesh = struct {
     index_buf_binding: c.SDL_GPUBufferBinding,
     /// internal
     index_count: u32,
+    /// internal
+    material: *const Material,
 
-    pub fn init(self: *@This(), renderer: *rdr.Renderer, vertices: []const Vertex, indices: []const u32) !void {
+    pub fn init(self: *@This(), renderer: *rdr.Renderer, vertices: []const Vertex, indices: []const u32, material: *const Material) !void {
         self.index_count = @intCast(indices.len);
+
+        self.material = material;
 
         var cmd_buf = try cmd.CommandBuffer.acquire(&renderer.gpu_device);
 
@@ -126,9 +147,10 @@ pub const Mesh = struct {
 
     /// binds vertex and index buffer and draws them
     /// model matrix encodes position, rotation, and scale of the mesh to be drawn
-    pub fn drawCall(self: *const @This(), model: la.Mat4) DrawCall {
+    pub fn drawCall(self: *const @This(), model_matrix: la.Mat4) DrawCall {
         return .{
-            .model = model,
+            .model = model_matrix,
+            .material = self.material,
             .vertex_buf_binding = self.vertex_buf_binding,
             .index_buf_binding = self.index_buf_binding,
             .index_count = self.index_count,

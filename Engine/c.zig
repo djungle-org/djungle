@@ -2,6 +2,7 @@ pub const c = @cImport({
     @cInclude("SDL3/SDL.h");
     @cInclude("SDL3/SDL_gpu.h");
     @cInclude("stb_image.h");
+    @cInclude("cgltf.h");
 });
 
 const std = @import("std");

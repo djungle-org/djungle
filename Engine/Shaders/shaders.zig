@@ -172,7 +172,7 @@ pub const ShaderRegistry = struct {
 /// will clear the shader registry
 /// reads shader_binaries.zon file in zig-out to create shaders which will be added to the registry
 /// shader_binaries.zon contains info about the spirv shader binaries
-pub fn loadShaders(io: std.Io, allocator: std.mem.Allocator, registry: *ShaderRegistry, gpu_device: *GpuDevice, spirv_bin_dir_path: []const u8) !void {
+pub fn loadShaders(io: std.Io, allocator: std.mem.Allocator, registry: *ShaderRegistry, gpu_device: *GpuDevice, spirv_bin_dir_path: [:0]const u8) !void {
     registry.clearRetainingCapacity();
 
     var arena_state = std.heap.ArenaAllocator.init(allocator);

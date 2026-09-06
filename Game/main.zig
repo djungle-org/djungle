@@ -20,22 +20,25 @@ pub fn main(init: std.process.Init) !void {
     var window = try win.Window.init(width, height, app_name);
     defer window.deinit();
 
-    const exe_dir_path = try std.process.executableDirPathAlloc(io, gpa);
-    defer gpa.free(exe_dir_path);
-
-    const spirv_bin_dir_path = try std.Io.Dir.path.join(gpa, &.{ exe_dir_path, "../Shaders" });
-    defer gpa.free(spirv_bin_dir_path);
+    const path_resolver = try rdr.PathResolver.init(gpa, io);
+    defer path_resolver.deinit(gpa);
 
     var renderer: rdr.Renderer = undefined;
-    try renderer.init(gpa, io, &window, .Auto, debug, spirv_bin_dir_path);
+    try renderer.init(gpa, io, &window, .Auto, debug, &path_resolver);
     defer renderer.deinit(gpa);
 
-    var cube: rdr.msh.Mesh = undefined;
-    try cube.init(&renderer, &rdr.msh.cube_vertices, &rdr.msh.cube_indices);
-    defer cube.deinit(&renderer);
+    // var cube: rdr.msh.Mesh = undefined;
+    // try cube.init(&renderer, &rdr.msh.cube_vertices, &rdr.msh.cube_indices);
+    // defer cube.deinit(&renderer);
+
+    const sponza_path = try path_resolver.resolvePath(gpa, .Assets, "sponza/Sponza.gltf");
+    defer gpa.free(sponza_path);
+
+    var sponza = try rdr.mdl.Model.init(sponza_path, gpa, &renderer, &path_resolver);
+    defer sponza.deinit(gpa, &renderer);
 
     const view_proj = rdr.ViewProj{
-        .view = try lalg.lookAt(.{ 0, 8, 16 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
+        .view = try lalg.lookAt(.{ 0, 0, 0 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
         .proj = lalg.perspective(width / height, std.math.degreesToRadians(60), 0.1, 100),
     };
 
@@ -43,42 +46,54 @@ pub fn main(init: std.process.Init) !void {
     while (running) {
         running = window.pollEvents();
 
-        const time = std.Io.Clock.awake.now(io);
-        const now: f32 = @floatFromInt(time.toMilliseconds());
-
         const model = lalg.mulMat(.{
-            lalg.translate(.{ 6 * @sin(now / 600), 0, 6 * @cos(now / 600) }),
-            try lalg.rotate(.{ 0, 1, 0 }, now / 600),
-            lalg.scale(.{ 2, 2, 2 }),
+            lalg.translate(.{ 0, 0, 10 }),
         });
 
-        var draw_call = cube.drawCall(model);
+        var draw_call: rdr.msh.DrawCall = undefined;
 
-        try renderer.queueDrawCall(gpa, draw_call);
+        for (sponza.meshes) |mesh| {
+            draw_call = mesh.drawCall(model);
 
-        draw_call.model = lalg.mulMat(.{
-            lalg.translate(.{ 4 * @sin(now / 400), 0, 4 * @cos(now / 400) }),
-            try lalg.rotate(.{ 0, 1, 0 }, now / 400),
-            lalg.scale(.{ 1, 1, 1 }),
-        });
+            try renderer.queueDrawCall(gpa, draw_call);
+        }
 
-        try renderer.queueDrawCall(gpa, draw_call);
-
-        draw_call.model = lalg.mulMat(.{
-            lalg.translate(.{ 2 * @sin(now / 200), 0, 2 * @cos(now / 200) }),
-            try lalg.rotate(.{ 0, 1, 0 }, now / 200),
-            lalg.scale(.{ 0.5, 0.5, 0.5 }),
-        });
-
-        try renderer.queueDrawCall(gpa, draw_call);
-
-        draw_call.model = lalg.mulMat(.{
-            lalg.translate(.{ @sin(now / 100), 0, @cos(now / 100) }),
-            try lalg.rotate(.{ 0, 1, 0 }, now / 100),
-            lalg.scale(.{ 0.25, 0.25, 0.25 }),
-        });
-
-        try renderer.queueDrawCall(gpa, draw_call);
+        // const time = std.Io.Clock.awake.now(io);
+        // const now: f32 = @floatFromInt(time.toMilliseconds());
+        //
+        // const model = lalg.mulMat(.{
+        //     lalg.translate(.{ 6 * @sin(now / 600), 0, 6 * @cos(now / 600) }),
+        //     try lalg.rotate(.{ 0, 1, 0 }, now / 600),
+        //     lalg.scale(.{ 2, 2, 2 }),
+        // });
+        //
+        // var draw_call = cube.drawCall(model);
+        //
+        // try renderer.queueDrawCall(gpa, draw_call);
+        //
+        // draw_call.model = lalg.mulMat(.{
+        //     lalg.translate(.{ 4 * @sin(now / 400), 0, 4 * @cos(now / 400) }),
+        //     try lalg.rotate(.{ 0, 1, 0 }, now / 400),
+        //     lalg.scale(.{ 1, 1, 1 }),
+        // });
+        //
+        // try renderer.queueDrawCall(gpa, draw_call);
+        //
+        // draw_call.model = lalg.mulMat(.{
+        //     lalg.translate(.{ 2 * @sin(now / 200), 0, 2 * @cos(now / 200) }),
+        //     try lalg.rotate(.{ 0, 1, 0 }, now / 200),
+        //     lalg.scale(.{ 0.5, 0.5, 0.5 }),
+        // });
+        //
+        // try renderer.queueDrawCall(gpa, draw_call);
+        //
+        // draw_call.model = lalg.mulMat(.{
+        //     lalg.translate(.{ @sin(now / 100), 0, @cos(now / 100) }),
+        //     try lalg.rotate(.{ 0, 1, 0 }, now / 100),
+        //     lalg.scale(.{ 0.25, 0.25, 0.25 }),
+        // });
+        //
+        // try renderer.queueDrawCall(gpa, draw_call);
 
         try renderer.render(&view_proj);
     }

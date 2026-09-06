@@ -25,6 +25,9 @@ pub fn build(b: *std.Build) !void {
     c_module.addCSourceFile(.{
         .file = b.path("Vendor/stb_image_impl.c"),
     });
+    c_module.addCSourceFile(.{
+        .file = b.path("Vendor/cgltf_impl.c"),
+    });
 
     c_module.linkSystemLibrary("SDL3", .{ .needed = true });
 
