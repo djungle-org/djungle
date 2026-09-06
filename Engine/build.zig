@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) !void {
         std.Build.LazyPath,
         "assets_dir",
         "Directory containing assets for the game",
-    ) orelse @panic("Invalid assets directory");
+    ) orelse b.path("."); // this dummy path should always be overrided by the game build.zig, only here to test build the engine standalone
 
     const build_config = b.addOptions();
     build_config.addOptionPath("assets_dir", assets_dir);
@@ -18,7 +18,7 @@ pub fn build(b: *std.Build) !void {
         std.Build.LazyPath,
         "shader_src_dir",
         "Directory containing shaders.zon and shader files",
-    ) orelse @panic("Invalid shader source directory");
+    ) orelse b.path("."); // same here, this dummy path should always be overrided by the game build.zig, only here to test build the engine standalone
 
     // engine module
 
