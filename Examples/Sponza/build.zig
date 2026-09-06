@@ -8,12 +8,15 @@ pub fn build(b: *std.Build) void {
     const engine_dep = b.dependency("Engine", .{
         .target = target,
         .optimize = optimize,
+        .assets_dir = b.path("Assets"), // REQUIRED: the engine needs to know where assets are located
+        .shader_src_dir = b.path("Assets/Shaders"), // REQUIRED: the engine needs to know where shaders are located
     });
 
     // grab whatever engine modules you need for your project
     const renderer_module = engine_dep.module("Renderer");
     const lalg_module = engine_dep.module("Lalg");
     const window_module = engine_dep.module("Window");
+    const logging_module = engine_dep.module("Logging");
 
     const exe = b.addExecutable(.{
         .name = "game",
@@ -25,13 +28,14 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    b.installArtifact(exe);
+
     exe.root_module.addImport("Renderer", renderer_module);
     exe.root_module.addImport("Lalg", lalg_module);
     exe.root_module.addImport("Window", window_module);
+    exe.root_module.addImport("Logging", logging_module);
 
-    b.installArtifact(exe);
-
-    // this section is needed in order to automatically compile shaders at build time
+    // REQUIRED: in order to automatically compile shaders at build time
     const compiled_shaders = engine_dep.namedLazyPath("compiled_shaders");
 
     const compile_shaders_step = &b.addInstallDirectory(.{

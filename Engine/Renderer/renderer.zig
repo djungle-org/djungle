@@ -1,4 +1,6 @@
 const std = @import("std");
+const build_config = @import("build_config");
+
 const c = @import("C").c;
 const win = @import("Window");
 const log = @import("Logging");
@@ -58,14 +60,11 @@ pub const PathResolver = struct {
         const exe_dir_path = try std.process.executableDirPathAlloc(io, gpa);
         defer gpa.free(exe_dir_path);
 
-        const assets_path = try std.Io.Dir.path.join(gpa, &.{ exe_dir_path, "../../../Assets" });
-        defer gpa.free(assets_path);
-
         const shader_bins_path = try std.Io.Dir.path.join(gpa, &.{ exe_dir_path, "../Shaders" });
         defer gpa.free(shader_bins_path);
 
         return .{
-            .assets_path = try gpa.dupeSentinel(u8, assets_path, 0),
+            .assets_path = try gpa.dupeSentinel(u8, build_config.assets_dir, 0),
             .shader_bins_path = try gpa.dupeSentinel(u8, shader_bins_path, 0),
         };
     }

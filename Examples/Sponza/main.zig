@@ -3,6 +3,7 @@ const std = @import("std");
 const rdr = @import("Renderer");
 const lalg = @import("Lalg");
 const win = @import("Window");
+const log = @import("Logging");
 
 const width = 800;
 const height = 800;
@@ -42,7 +43,7 @@ pub fn main(init: std.process.Init) !void {
 
     const t1 = clock.now(io);
 
-    std.log.info("model load took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
+    log.info("model load took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
 
     const view_proj = rdr.ViewProj{
         .view = try lalg.lookAt(.{ 0, 0, 0 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),

@@ -4,6 +4,22 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // options
+    const assets_dir = b.option(
+        std.Build.LazyPath,
+        "assets_dir",
+        "Directory containing assets for the game",
+    ) orelse @panic("Invalid assets directory");
+
+    const build_config = b.addOptions();
+    build_config.addOptionPath("assets_dir", assets_dir);
+
+    const shader_src_dir = b.option(
+        std.Build.LazyPath,
+        "shader_src_dir",
+        "Directory containing shaders.zon and shader files",
+    ) orelse @panic("Invalid shader source directory");
+
     // engine module
 
     const vulkan_module = b.dependency("vulkan", .{
@@ -78,6 +94,8 @@ pub fn build(b: *std.Build) !void {
 
     shaders_module.addImport("Renderer", renderer_module);
 
+    renderer_module.addOptions("build_config", build_config);
+
     renderer_module.addImport("C", c_module);
     renderer_module.addImport("Vulkan", vulkan_module);
     renderer_module.addImport("Lalg", lalg_module);
@@ -107,7 +125,7 @@ pub fn build(b: *std.Build) !void {
 
     const run_shader_compiler = b.addRunArtifact(shader_compiler);
     run_shader_compiler.stdio = .inherit;
-    run_shader_compiler.addDirectoryArg(b.path("../Assets/Shaders"));
+    run_shader_compiler.addDirectoryArg(shader_src_dir);
     const compiled_shaders_dir = run_shader_compiler.addOutputDirectoryArg("compiled_shaders_dir");
 
     // to be used by game build.zig to run shader_compiler executable and make zig-out shader directory

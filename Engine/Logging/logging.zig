@@ -11,3 +11,7 @@ pub fn warn(comptime src: std.builtin.SourceLocation, comptime fmt: []const u8, 
 pub fn debug(comptime src: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     std.log.debug("{s}:{d} in {s}: " ++ fmt, .{ src.file, src.line, src.fn_name } ++ args);
 }
+
+pub fn info(comptime fmt: []const u8, args: anytype) void {
+    std.log.info(fmt, args);
+}
