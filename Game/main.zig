@@ -34,8 +34,15 @@ pub fn main(init: std.process.Init) !void {
     const sponza_path = try path_resolver.resolvePath(gpa, .Assets, "sponza/Sponza.gltf");
     defer gpa.free(sponza_path);
 
+    const clock = std.Io.Clock.awake;
+    const t0 = clock.now(io);
+
     var sponza = try rdr.mdl.Model.init(sponza_path, gpa, &renderer, &path_resolver);
     defer sponza.deinit(gpa, &renderer);
+
+    const t1 = clock.now(io);
+
+    std.log.info("model load took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
 
     const view_proj = rdr.ViewProj{
         .view = try lalg.lookAt(.{ 0, 0, 0 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
@@ -47,7 +54,7 @@ pub fn main(init: std.process.Init) !void {
         running = window.pollEvents();
 
         const model = lalg.mulMat(.{
-            lalg.translate(.{ 0, 0, 10 }),
+            lalg.translate(.{ 0, 0, 100 }),
         });
 
         var draw_call: rdr.msh.DrawCall = undefined;

@@ -259,7 +259,7 @@ pub const Renderer = struct {
             .texture = swapchain_tex.sdl_texture,
             .mip_level = 0,
             .layer_or_depth_plane = 0,
-            .clear_color = .{ .r = 0.5, .g = 0.2, .b = 0.7, .a = 1.0 },
+            .clear_color = .{ .r = 0.2, .g = 0.3, .b = 0.8, .a = 1.0 },
             .load_op = c.SDL_GPU_LOADOP_CLEAR,
             .store_op = c.SDL_GPU_STOREOP_STORE,
             .resolve_texture = null, // resolve fields can be ignored since a resolve store_op is not being used

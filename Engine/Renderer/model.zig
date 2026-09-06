@@ -107,6 +107,10 @@ pub const Model = struct {
 
         var mesh_idx: usize = 0;
 
+        var cmd_buf = try cmd.CommandBuffer.acquire(&renderer.gpu_device);
+
+        const copy_pass = try cmd_buf.beginCopyPass();
+
         for (0..data.meshes_count) |i| {
             const c_mesh = data.meshes[i];
 
@@ -125,6 +129,7 @@ pub const Model = struct {
                     try loadPrimitiveMaterial(
                         gpa,
                         &renderer.gpu_device,
+                        copy_pass,
                         primitive,
                         data,
                         gltf_path,
@@ -136,6 +141,10 @@ pub const Model = struct {
                 mesh_idx += 1;
             }
         }
+
+        c.SDL_EndGPUCopyPass(copy_pass);
+
+        try cmd_buf.submit();
 
         return .{
             .meshes = meshes,
@@ -237,6 +246,7 @@ fn loadPrimitiveIndices(gpa: std.mem.Allocator, primitive: *const c.cgltf_primit
 fn loadPrimitiveMaterial(
     gpa: std.mem.Allocator,
     gpu_device: *dev.GpuDevice,
+    copy_pass: *c.SDL_GPUCopyPass,
     primitive: *const c.cgltf_primitive,
     data: *const c.cgltf_data,
     gltf_path: []const u8,
@@ -274,15 +284,7 @@ fn loadPrimitiveMaterial(
         ._1,
     );
 
-    var cmd_buf = try cmd.CommandBuffer.acquire(gpu_device);
-
-    const copy_pass = try cmd_buf.beginCopyPass();
-
     try texture.upload(gpu_device, copy_pass, &image);
-
-    c.SDL_EndGPUCopyPass(copy_pass);
-
-    try cmd_buf.submit();
 
     const mat = try msh.Material.init(texture);
 

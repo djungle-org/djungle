@@ -107,7 +107,7 @@ pub fn build(b: *std.Build) !void {
 
     const run_shader_compiler = b.addRunArtifact(shader_compiler);
     run_shader_compiler.stdio = .inherit;
-    run_shader_compiler.addDirectoryArg(b.path("Shaders/Source"));
+    run_shader_compiler.addDirectoryArg(b.path("../Assets/Shaders"));
     const compiled_shaders_dir = run_shader_compiler.addOutputDirectoryArg("compiled_shaders_dir");
 
     // to be used by game build.zig to run shader_compiler executable and make zig-out shader directory
