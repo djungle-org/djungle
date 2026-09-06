@@ -4,6 +4,9 @@ const rdr = @import("Renderer");
 const lalg = @import("Lalg");
 const win = @import("Window");
 const log = @import("Logging");
+const ipt = @import("Input");
+
+const cam = @import("camera_controller.zig");
 
 const width = 800;
 const height = 800;
@@ -41,10 +44,9 @@ pub fn main(init: std.process.Init) !void {
 
     log.info("model load took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
 
-    const view_proj = rdr.ViewProj{
-        .view = try lalg.lookAt(.{ 0, 0, 0 }, .{ 0, 0, 2 }, .{ 0, 1, 0 }),
-        .proj = lalg.perspective(width / height, std.math.degreesToRadians(60), 0.1, 100),
-    };
+    const input = ipt.Input.init();
+
+    var camera: cam.Camera = .{};
 
     var running = true;
     while (running) {
@@ -52,6 +54,7 @@ pub fn main(init: std.process.Init) !void {
 
         const model = lalg.mulMat(.{
             lalg.translate(.{ 0, 0, 100 }),
+            lalg.scale(.{ 0.1, 0.1, 0.1 }),
         });
 
         var draw_call: rdr.msh.DrawCall = undefined;
@@ -62,6 +65,8 @@ pub fn main(init: std.process.Init) !void {
             try renderer.queueDrawCall(gpa, draw_call);
         }
 
-        try renderer.render(&view_proj);
+        const vp_mat = try camera.move(input, width, height, 60, 0.01, 1000);
+
+        try renderer.render(&vp_mat);
     }
 }

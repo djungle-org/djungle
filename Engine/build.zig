@@ -85,6 +85,14 @@ pub fn build(b: *std.Build) !void {
 
     shaders_module.addImport("C", c_module);
 
+    const input_module = b.addModule("Input", .{
+        .root_source_file = b.path("Input/input.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    input_module.addImport("C", c_module);
+
     const renderer_module = b.addModule("Renderer", .{
         .root_source_file = b.path("Renderer/renderer.zig"),
         .target = target,

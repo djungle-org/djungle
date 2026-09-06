@@ -193,7 +193,7 @@ pub const Renderer = struct {
             },
             .depth_stencil_state = .{
                 .enable_depth_test = true,
-                .enable_depth_write = false,
+                .enable_depth_write = true,
                 .compare_op = c.SDL_GPU_COMPAREOP_LESS_OR_EQUAL,
                 .enable_stencil_test = false,
                 .back_stencil_state = .{ // all this can be ignored if enable stencil test is false

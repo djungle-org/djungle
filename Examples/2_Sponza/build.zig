@@ -17,6 +17,7 @@ pub fn build(b: *std.Build) void {
     const lalg_module = engine_dep.module("Lalg");
     const window_module = engine_dep.module("Window");
     const logging_module = engine_dep.module("Logging");
+    const input_module = engine_dep.module("Input");
 
     const exe = b.addExecutable(.{
         .name = "game",
@@ -34,6 +35,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("Lalg", lalg_module);
     exe.root_module.addImport("Window", window_module);
     exe.root_module.addImport("Logging", logging_module);
+    exe.root_module.addImport("Input", input_module);
 
     // REQUIRED: in order to automatically compile shaders at build time
     const compiled_shaders = engine_dep.namedLazyPath("compiled_shaders");

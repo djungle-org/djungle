@@ -4,9 +4,11 @@ import common;
 Sampler2D texture;
 
 [shader("fragment")]
-float4 fragMain(VSOutput vertIn) : SV_Target {
+float4 fragMain(VSOutput vertIn, float4 screenCoord: SV_Position) : SV_Target {
   // return float4(1.0, 1.0, 1.0, 1.0);
   // return lerp(float4(vertIn.col, 1.0), texture.Sample(vertIn.uv), 0.5);
+  float currentDepth = screenCoord.z;
+  // return float4(currentDepth, currentDepth, currentDepth, 1.0);
   return texture.Sample(vertIn.uv);
 }
 
