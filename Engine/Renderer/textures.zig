@@ -117,8 +117,8 @@ const Sampler = struct {
         _ = create_info;
 
         const sampler_info = c.SDL_GPUSamplerCreateInfo{
-            .min_filter = c.SDL_GPU_FILTER_NEAREST,
-            .mag_filter = c.SDL_GPU_FILTER_NEAREST,
+            .min_filter = c.SDL_GPU_FILTER_LINEAR,
+            .mag_filter = c.SDL_GPU_FILTER_LINEAR,
             .mipmap_mode = c.SDL_GPU_SAMPLERMIPMAPMODE_LINEAR,
             .address_mode_u = c.SDL_GPU_SAMPLERADDRESSMODE_REPEAT,
             .address_mode_v = c.SDL_GPU_SAMPLERADDRESSMODE_REPEAT,

@@ -46,14 +46,7 @@ pub const Window = struct {
         c.SDL_Quit();
     }
 
-    pub fn pollEvents(_: *const @This()) bool {
-        var event: c.SDL_Event = undefined;
-        while (c.SDL_PollEvent(&event)) {
-            if (event.type == c.SDL_EVENT_QUIT) {
-                return false;
-            }
-        }
-
-        return true;
+    pub fn handleEvent(_: *@This(), event: *const c.SDL_Event) bool {
+        return event.type != c.SDL_EVENT_QUIT;
     }
 };

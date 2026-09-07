@@ -5,12 +5,13 @@ const lalg = @import("Lalg");
 const win = @import("Window");
 const log = @import("Logging");
 const ipt = @import("Input");
+const c = @import("C").c;
 
 const cam = @import("camera_controller.zig");
 
 const width = 800;
 const height = 800;
-const app_name = "djungle";
+const app_name = "2_Sponza";
 
 const debug: bool = switch (@import("builtin").mode) {
     .Debug, .ReleaseSafe => true,
@@ -44,13 +45,20 @@ pub fn main(init: std.process.Init) !void {
 
     log.info("model load took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
 
-    const input = ipt.Input.init();
+    var input = ipt.Input.init();
+    try input.setCursorLockAndHide(&window, true);
 
     var camera: cam.Camera = .{};
 
     var running = true;
     while (running) {
-        running = window.pollEvents();
+        input.resetMouseState();
+
+        var event: c.SDL_Event = undefined;
+        while (c.SDL_PollEvent(&event)) {
+            if (!window.handleEvent(&event)) running = false;
+            input.handleEvent(&event);
+        }
 
         const model = lalg.mulMat(.{
             lalg.translate(.{ 0, 0, 100 }),
@@ -65,7 +73,15 @@ pub fn main(init: std.process.Init) !void {
             try renderer.queueDrawCall(gpa, draw_call);
         }
 
-        const vp_mat = try camera.move(input, width, height, 60, 0.01, 1000);
+        const vp_mat = try camera.moveAndLook(
+            input,
+            width,
+            height,
+            60,
+            0.01,
+            1000,
+            0.01,
+        );
 
         try renderer.render(&vp_mat);
     }

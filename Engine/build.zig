@@ -92,6 +92,7 @@ pub fn build(b: *std.Build) !void {
     });
 
     input_module.addImport("C", c_module);
+    input_module.addImport("Window", window_module);
 
     const renderer_module = b.addModule("Renderer", .{
         .root_source_file = b.path("Renderer/renderer.zig"),
