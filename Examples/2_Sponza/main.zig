@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const rdr = @import("Renderer");
+const core = @import("Core");
 const lalg = @import("Lalg");
 const win = @import("Window");
 const log = @import("Logging");
@@ -25,7 +26,7 @@ pub fn main(init: std.process.Init) !void {
     var window = try win.Window.init(width, height, app_name);
     defer window.deinit();
 
-    const path_resolver = try rdr.PathResolver.init(gpa, io);
+    const path_resolver = try core.PathResolver.init(gpa, io);
     defer path_resolver.deinit(gpa);
 
     var renderer: rdr.Renderer = undefined;

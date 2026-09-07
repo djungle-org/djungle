@@ -22,7 +22,7 @@ pub fn build(b: *std.Build) !void {
 
     // engine module
 
-    const vulkan_module = b.dependency("vulkan", .{
+    const vulkan = b.dependency("vulkan", .{
         .registry = std.Build.LazyPath{
             .cwd_relative = b.graph.environ_map.get("VULKAN_REGISTRY_XML") orelse {
                 return error.FailedToFindVulkan;
@@ -31,89 +31,96 @@ pub fn build(b: *std.Build) !void {
         },
     }).module("vulkan-zig");
 
-    const c_module = b.addModule("C", .{
+    const c = b.addModule("C", .{
         .root_source_file = b.path("c.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    c_module.addIncludePath(b.path("Vendor"));
-    c_module.addCSourceFile(.{
+    c.addIncludePath(b.path("Vendor"));
+    c.addCSourceFile(.{
         .file = b.path("Vendor/stb_image_impl.c"),
     });
-    c_module.addCSourceFile(.{
+    c.addCSourceFile(.{
         .file = b.path("Vendor/cgltf_impl.c"),
     });
 
-    c_module.linkSystemLibrary("SDL3", .{ .needed = true });
+    c.linkSystemLibrary("SDL3", .{ .needed = true });
 
-    const logging_module = b.addModule("Logging", .{
+    const logging = b.addModule("Logging", .{
         .root_source_file = b.path("Logging/logging.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    const deletion_queue_module = b.addModule("DeletionQueue", .{
+    const deletion_queue = b.addModule("DeletionQueue", .{
         .root_source_file = b.path("DeletionQueue/deletion_queue.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    const lalg_module = b.addModule("Lalg", .{
+    const core = b.addModule("Core", .{
+        .root_source_file = b.path("Core/core.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    core.addOptions("build_config", build_config);
+
+    const lalg = b.addModule("Lalg", .{
         .root_source_file = b.path("Lalg/lalg.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    const lalg_tests = b.addTest(.{ .root_module = lalg_module });
+    const lalg_tests = b.addTest(.{ .root_module = lalg });
     const run_lalg_tests = b.addRunArtifact(lalg_tests);
 
-    const window_module = b.addModule("Window", .{
+    const window = b.addModule("Window", .{
         .root_source_file = b.path("Window/window.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
 
-    window_module.addImport("C", c_module);
+    window.addImport("C", c);
 
-    const shaders_module = b.addModule("Shaders", .{
+    const shaders = b.addModule("Shaders", .{
         .root_source_file = b.path("Shaders/shaders.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    shaders_module.addImport("C", c_module);
+    shaders.addImport("C", c);
 
-    const input_module = b.addModule("Input", .{
+    const input = b.addModule("Input", .{
         .root_source_file = b.path("Input/input.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    input_module.addImport("C", c_module);
-    input_module.addImport("Window", window_module);
+    input.addImport("C", c);
+    input.addImport("Window", window);
 
-    const renderer_module = b.addModule("Renderer", .{
+    const renderer = b.addModule("Renderer", .{
         .root_source_file = b.path("Renderer/renderer.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
 
-    shaders_module.addImport("Renderer", renderer_module);
+    shaders.addImport("Renderer", renderer);
 
-    renderer_module.addOptions("build_config", build_config);
+    renderer.addImport("C", c);
+    renderer.addImport("Vulkan", vulkan);
+    renderer.addImport("Lalg", lalg);
+    renderer.addImport("DeletionQueue", deletion_queue);
+    renderer.addImport("Window", window);
+    renderer.addImport("Shaders", shaders);
+    renderer.addImport("Core", core);
 
-    renderer_module.addImport("C", c_module);
-    renderer_module.addImport("Vulkan", vulkan_module);
-    renderer_module.addImport("Lalg", lalg_module);
-    renderer_module.addImport("DeletionQueue", deletion_queue_module);
-    renderer_module.addImport("Window", window_module);
-    renderer_module.addImport("Shaders", shaders_module);
-
-    for ([_]*std.Build.Module{ window_module, renderer_module, deletion_queue_module, c_module, shaders_module }) |m| {
-        m.addImport("Logging", logging_module);
+    for ([_]*std.Build.Module{ window, renderer, deletion_queue, c, shaders }) |m| {
+        m.addImport("Logging", logging);
     }
 
     // shader compiler executable
@@ -128,7 +135,7 @@ pub fn build(b: *std.Build) !void {
         }),
     });
 
-    shader_compiler.root_module.addImport("Shaders", shaders_module);
+    shader_compiler.root_module.addImport("Shaders", shaders);
 
     b.installArtifact(shader_compiler);
 
@@ -152,7 +159,7 @@ pub fn build(b: *std.Build) !void {
 
     const exe_check = b.addExecutable(.{
         .name = "engine-check",
-        .root_module = renderer_module,
+        .root_module = renderer,
     });
     const check_step = b.step("check", "Check if it compiles");
     check_step.dependOn(&exe_check.step);

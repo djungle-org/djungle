@@ -1,6 +1,7 @@
 const std = @import("std");
 const c = @import("C").c;
 const log = @import("Logging");
+const core = @import("Core");
 
 const rdr = @import("renderer.zig");
 const msh = @import("mesh.zig");
@@ -79,7 +80,7 @@ pub const Model = struct {
     /// internal
     meshes: []msh.Mesh,
 
-    pub fn init(gltf_path: [:0]const u8, gpa: std.mem.Allocator, renderer: *rdr.Renderer, path_resolver: *const rdr.PathResolver) !@This() {
+    pub fn init(gltf_path: [:0]const u8, gpa: std.mem.Allocator, renderer: *rdr.Renderer, path_resolver: *const core.PathResolver) !@This() {
         const cgltf_options = std.mem.zeroes(c.cgltf_options);
 
         var data_opt: ?*c.cgltf_data = null;
@@ -251,7 +252,7 @@ fn loadPrimitiveMaterial(
     data: *const c.cgltf_data,
     gltf_path: []const u8,
     cache: *MaterialCache,
-    path_resolver: *const rdr.PathResolver,
+    path_resolver: *const core.PathResolver,
 ) !*const msh.Material {
     const material = primitive.material orelse return ModelError.MissingMaterial;
     const base_col_tex = material.*.pbr_metallic_roughness.base_color_texture.texture orelse return ModelError.MissingMaterialTexture;

@@ -13,12 +13,13 @@ pub fn build(b: *std.Build) void {
     });
 
     // grab whatever engine modules you need for your project
-    const renderer_module = engine_dep.module("Renderer");
-    const lalg_module = engine_dep.module("Lalg");
-    const window_module = engine_dep.module("Window");
-    const logging_module = engine_dep.module("Logging");
-    const input_module = engine_dep.module("Input");
-    const c_module = engine_dep.module("C");
+    const renderer = engine_dep.module("Renderer");
+    const lalg = engine_dep.module("Lalg");
+    const window = engine_dep.module("Window");
+    const logging = engine_dep.module("Logging");
+    const input = engine_dep.module("Input");
+    const core = engine_dep.module("Core");
+    const c = engine_dep.module("C");
 
     const exe = b.addExecutable(.{
         .name = "game",
@@ -32,12 +33,13 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
-    exe.root_module.addImport("Renderer", renderer_module);
-    exe.root_module.addImport("Lalg", lalg_module);
-    exe.root_module.addImport("Window", window_module);
-    exe.root_module.addImport("Logging", logging_module);
-    exe.root_module.addImport("Input", input_module);
-    exe.root_module.addImport("C", c_module);
+    exe.root_module.addImport("Renderer", renderer);
+    exe.root_module.addImport("Lalg", lalg);
+    exe.root_module.addImport("Window", window);
+    exe.root_module.addImport("Logging", logging);
+    exe.root_module.addImport("Input", input);
+    exe.root_module.addImport("Core", core);
+    exe.root_module.addImport("C", c);
 
     // REQUIRED: in order to automatically compile shaders at build time
     const compiled_shaders = engine_dep.namedLazyPath("compiled_shaders");
