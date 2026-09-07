@@ -14,8 +14,11 @@ pub const Camera = struct {
         const world_up = la.Vec3{ 0, 1, 0 };
 
         self.yaw += input.mouse_dx * sensitivity;
-        self.pitch += input.mouse_dy * sensitivity;
-        self.pitch = std.math.clamp(self.pitch, -90, 90);
+        self.pitch = std.math.clamp(
+            self.pitch - input.mouse_dy * sensitivity,
+            -89,
+            89,
+        );
 
         var forward = la.Vec3{ 0, 0, 0 };
         forward[0] = @cos(self.pitch) * @sin(self.yaw);

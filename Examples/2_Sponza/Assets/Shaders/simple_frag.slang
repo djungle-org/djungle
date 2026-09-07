@@ -9,6 +9,13 @@ float4 fragMain(VSOutput vertIn, float4 screenCoord: SV_Position) : SV_Target {
   // return lerp(float4(vertIn.col, 1.0), texture.Sample(vertIn.uv), 0.5);
   float currentDepth = screenCoord.z;
   // return float4(currentDepth, currentDepth, currentDepth, 1.0);
-  return texture.Sample(vertIn.uv);
+
+  float4 baseColor = texture.Sample(vertIn.uv);
+
+  if (baseColor.a < 0.1) {
+    discard;
+  }
+
+  return baseColor;
 }
 

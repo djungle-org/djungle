@@ -9,8 +9,8 @@ const c = @import("C").c;
 
 const cam = @import("camera_controller.zig");
 
-const width = 800;
-const height = 800;
+const width = 1600;
+const height = 900;
 const app_name = "2_Sponza";
 
 const debug: bool = switch (@import("builtin").mode) {

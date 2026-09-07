@@ -32,8 +32,13 @@ pub const GpuDevice = struct {
             .Metal => "metal",
         };
 
+        var vulkan_13_features = vk.PhysicalDeviceVulkan13Features{
+            .shader_demote_to_helper_invocation = .true,
+        };
+
         var draw_params_features = vk.PhysicalDeviceShaderDrawParametersFeatures{
-            .shader_draw_parameters = vk.Bool32.true,
+            .shader_draw_parameters = .true,
+            .p_next = &vulkan_13_features,
         };
 
         var vulkan_options = std.mem.zeroes(c.SDL_GPUVulkanOptions);
