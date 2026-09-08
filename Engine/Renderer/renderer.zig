@@ -48,9 +48,15 @@ pub const Renderer = struct {
     gpu_device: dev.GpuDevice,
 
     /// internal
+    allocator: std.mem.Allocator,
+    /// internal
     window: *win.Window,
     /// internal
     swapchain_format: tex.TextureFormat,
+    /// internal
+    multisamples: tex.SampleCount,
+    /// internal
+    col_tex: tex.Texture,
     /// internal
     depth_tex: tex.Texture,
     /// internal
@@ -66,11 +72,13 @@ pub const Renderer = struct {
         self: *@This(),
         gpa: std.mem.Allocator,
         io: std.Io,
+        path_resolver: *const core.PathResolver,
         window: *win.Window,
         gpu_driver: dev.GpuDriver,
         debug: bool,
-        path_resolver: *const core.PathResolver,
+        multisamples: tex.SampleCount,
     ) !void {
+        self.allocator = gpa;
         self.window = window;
 
         self.draw_queue = .empty;
@@ -84,6 +92,19 @@ pub const Renderer = struct {
 
         try sh.loadShaders(io, gpa, &self.shaders, &self.gpu_device, path_resolver.shader_bins_path);
 
+        self.multisamples = multisamples;
+
+        self.col_tex = try tex.Texture.init(
+            &self.gpu_device,
+            ._2d,
+            self.swapchain_format,
+            .{ .color_target = true },
+            null,
+            window.width,
+            window.height,
+            self.multisamples,
+        );
+
         self.depth_tex = try tex.Texture.init(
             &self.gpu_device,
             ._2d,
@@ -92,7 +113,7 @@ pub const Renderer = struct {
             null,
             window.width,
             window.height,
-            ._1,
+            self.multisamples,
         );
 
         const color_target_description = c.SDL_GPUColorTargetDescription{
@@ -133,7 +154,7 @@ pub const Renderer = struct {
                 .enable_depth_clip = true,
             },
             .multisample_state = .{
-                .sample_count = tex.SampleCount.toSdl(._1),
+                .sample_count = tex.SampleCount.toSdl(self.multisamples),
                 .enable_alpha_to_coverage = false,
             },
             .depth_stencil_state = .{
@@ -172,26 +193,28 @@ pub const Renderer = struct {
         );
     }
 
-    pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+    pub fn deinit(self: *@This()) void {
         // c.SDL_ReleaseGPUSampler(self.gpu_device.sdl_gpu_device, self.sampler);
 
         c.SDL_ReleaseGPUGraphicsPipeline(self.gpu_device.sdl_gpu_device, self.graphics_pipeline);
 
         self.depth_tex.deinit(&self.gpu_device);
 
+        self.col_tex.deinit(&self.gpu_device);
+
         self.shaders.deinit(&self.gpu_device);
 
-        self.material_cache.deinit(gpa, self);
+        self.material_cache.deinit(self.allocator, self);
 
-        self.draw_queue.deinit(gpa);
+        self.draw_queue.deinit(self.allocator);
 
         self.gpu_device.deinit();
     }
 
     /// queues up a draw call to be submitted during the render function
     /// acquire a DrawCall from Mesh.drawCall
-    pub fn queueDrawCall(self: *@This(), gpa: std.mem.Allocator, draw_call: msh.DrawCall) !void {
-        try self.draw_queue.pushBack(gpa, draw_call);
+    pub fn queueDrawCall(self: *@This(), draw_call: msh.DrawCall) !void {
+        try self.draw_queue.pushBack(self.allocator, draw_call);
     }
 
     pub fn render(self: *@This(), view_proj: *const ViewProj) !void {
@@ -199,22 +222,37 @@ pub const Renderer = struct {
 
         const swapchain_tex = try command_buffer.waitAndAcquireSwapchainTexture(&self.gpu_device, self.window);
 
-        const color_target_info = c.SDL_GPUColorTargetInfo{
-            .texture = swapchain_tex.sdl_texture,
-            .mip_level = 0,
-            .layer_or_depth_plane = 0,
-            .clear_color = .{ .r = 0.2, .g = 0.3, .b = 0.8, .a = 1.0 },
-            .load_op = c.SDL_GPU_LOADOP_CLEAR,
-            .store_op = c.SDL_GPU_STOREOP_STORE,
-            .resolve_texture = null, // resolve fields can be ignored since a resolve store_op is not being used
-            .cycle = true,
-        };
+        const color_target_info: c.SDL_GPUColorTargetInfo = if (self.multisamples == ._1)
+            c.SDL_GPUColorTargetInfo{
+                .texture = swapchain_tex.sdl_texture,
+                .mip_level = 0,
+                .layer_or_depth_plane = 0,
+                .clear_color = .{ .r = 0.2, .g = 0.3, .b = 0.8, .a = 1.0 },
+                .load_op = c.SDL_GPU_LOADOP_CLEAR,
+                .store_op = c.SDL_GPU_STOREOP_STORE,
+                .resolve_texture = null,
+                .cycle = true,
+            }
+        else
+            c.SDL_GPUColorTargetInfo{
+                .texture = self.col_tex.sdl_texture,
+                .mip_level = 0,
+                .layer_or_depth_plane = 0,
+                .clear_color = .{ .r = 0.2, .g = 0.3, .b = 0.8, .a = 1.0 },
+                .load_op = c.SDL_GPU_LOADOP_CLEAR,
+                .store_op = c.SDL_GPU_STOREOP_RESOLVE, // resolve is for msaa
+                .resolve_texture = swapchain_tex.sdl_texture, // ISSUE HERE, THIS MODIFIES THE READ ONLY SDL_TEXTURE, downsampling into swapchain texture
+                .resolve_layer = 0,
+                .resolve_mip_level = 0,
+                .cycle_resolve_texture = true,
+                .cycle = true,
+            };
 
         const depth_stencil_target_info = c.SDL_GPUDepthStencilTargetInfo{
             .texture = self.depth_tex.sdl_texture,
             .clear_depth = 1, // can be ignored if loadop isnt clear
             .load_op = c.SDL_GPU_LOADOP_CLEAR,
-            .store_op = c.SDL_GPU_STOREOP_STORE,
+            .store_op = c.SDL_GPU_STOREOP_DONT_CARE,
             .stencil_load_op = c.SDL_GPU_LOADOP_DONT_CARE,
             .stencil_store_op = c.SDL_GPU_STOREOP_DONT_CARE,
             .clear_stencil = 0, // can be ignored if stnecil load op isnt clear
@@ -246,6 +284,8 @@ pub const Renderer = struct {
         c.SDL_SetGPUViewport(render_pass, &viewport);
 
         c.SDL_BindGPUGraphicsPipeline(render_pass, self.graphics_pipeline);
+
+        // --- drawing
 
         command_buffer.pushVertexUniformData(0, ViewProj, view_proj);
 

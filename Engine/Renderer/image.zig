@@ -32,7 +32,7 @@ pub const Image = struct {
         };
 
         const w: usize = @intCast(width);
-        const h: usize = @intCast(width);
+        const h: usize = @intCast(height);
 
         const pixels_len = w * h * c.STBI_rgb_alpha;
 

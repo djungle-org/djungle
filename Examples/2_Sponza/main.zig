@@ -30,8 +30,8 @@ pub fn main(init: std.process.Init) !void {
     defer path_resolver.deinit(gpa);
 
     var renderer: rdr.Renderer = undefined;
-    try renderer.init(gpa, io, &window, .Auto, debug, &path_resolver);
-    defer renderer.deinit(gpa);
+    try renderer.init(gpa, io, &path_resolver, &window, .Auto, debug, ._4);
+    defer renderer.deinit();
 
     const sponza_path = try path_resolver.resolvePath(gpa, .Assets, "sponza/Sponza.gltf");
     defer gpa.free(sponza_path);
@@ -71,7 +71,7 @@ pub fn main(init: std.process.Init) !void {
         for (sponza.meshes) |mesh| {
             draw_call = mesh.drawCall(model);
 
-            try renderer.queueDrawCall(gpa, draw_call);
+            try renderer.queueDrawCall(draw_call);
         }
 
         const vp_mat = try camera.moveAndLook(
