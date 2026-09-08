@@ -7,6 +7,7 @@ const log = @import("Logging");
 const vk = @import("Vulkan");
 const la = @import("Lalg");
 const sh = @import("Shaders");
+const dq = @import("DeletionQueue");
 
 pub const buf = @import("buffer.zig");
 pub const img = @import("image.zig");
@@ -48,6 +49,8 @@ pub const Renderer = struct {
     gpu_device: dev.GpuDevice,
 
     /// internal
+    delque: dq.DeletionQueue,
+    /// internal
     allocator: std.mem.Allocator,
     /// internal
     window: *win.Window,
@@ -79,18 +82,26 @@ pub const Renderer = struct {
         multisamples: tex.SampleCount,
     ) !void {
         self.allocator = gpa;
+
+        self.delque = try .initCapacity(self.allocator, 5);
+
         self.window = window;
 
-        self.draw_queue = .empty;
-        self.material_cache = try .init(gpa);
-
         self.gpu_device = try .init(gpu_driver, debug, self.window);
+        try self.delque.push(self.allocator, dev.GpuDevice.deinit, .{&self.gpu_device});
 
-        self.swapchain_format = try self.gpu_device.getSwapchainFormat(self.window);
+        self.draw_queue = .empty;
+        try self.delque.push(self.allocator, std.Deque(msh.DrawCall).deinit, .{ &self.draw_queue, self.allocator });
+
+        self.material_cache = try .init(gpa);
+        try self.delque.push(self.allocator, mdl.MaterialCache.deinit, .{ &self.material_cache, self.allocator, self });
 
         self.shaders = try ShaderRegistry.init(gpa);
+        try self.delque.push(self.allocator, ShaderRegistry.deinit, .{ &self.shaders, &self.gpu_device });
 
         try sh.loadShaders(io, gpa, &self.shaders, &self.gpu_device, path_resolver.shader_bins_path);
+
+        self.swapchain_format = try self.gpu_device.getSwapchainFormat(self.window);
 
         self.multisamples = multisamples;
 
@@ -104,6 +115,7 @@ pub const Renderer = struct {
             window.height,
             self.multisamples,
         );
+        try self.delque.push(self.allocator, tex.Texture.deinit, .{ &self.col_tex, &self.gpu_device });
 
         self.depth_tex = try tex.Texture.init(
             &self.gpu_device,
@@ -115,6 +127,7 @@ pub const Renderer = struct {
             window.height,
             self.multisamples,
         );
+        try self.delque.push(self.allocator, tex.Texture.deinit, .{ &self.depth_tex, &self.gpu_device });
 
         const color_target_description = c.SDL_GPUColorTargetDescription{
             .format = self.swapchain_format.toSdl(),
@@ -191,24 +204,12 @@ pub const Renderer = struct {
             c.SDL_CreateGPUGraphicsPipeline(self.gpu_device.sdl_gpu_device, &gfx_pipeline_info),
             RendererError.FailedToCreateGpuGraphicsPipeline,
         );
+
+        try self.delque.push(gpa, c.SDL_ReleaseGPUGraphicsPipeline, .{ self.gpu_device.sdl_gpu_device, self.graphics_pipeline });
     }
 
     pub fn deinit(self: *@This()) void {
-        // c.SDL_ReleaseGPUSampler(self.gpu_device.sdl_gpu_device, self.sampler);
-
-        c.SDL_ReleaseGPUGraphicsPipeline(self.gpu_device.sdl_gpu_device, self.graphics_pipeline);
-
-        self.depth_tex.deinit(&self.gpu_device);
-
-        self.col_tex.deinit(&self.gpu_device);
-
-        self.shaders.deinit(&self.gpu_device);
-
-        self.material_cache.deinit(self.allocator, self);
-
-        self.draw_queue.deinit(self.allocator);
-
-        self.gpu_device.deinit();
+        self.delque.deinit(self.allocator);
     }
 
     /// queues up a draw call to be submitted during the render function
