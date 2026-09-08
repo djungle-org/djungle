@@ -7,12 +7,6 @@ const buf = @import("buffer.zig");
 const sdlCheck = @import("C").sdlCheck;
 const GpuDevice = @import("gpu_device.zig").GpuDevice;
 
-pub const TextureError = error{
-    FailedToCreateGpuTexture,
-    InvalidTextureUsageCombination,
-    UnknownTextureFormat,
-};
-
 pub const SampleCount = enum {
     _1,
     _2,
@@ -73,7 +67,7 @@ pub const TextureFormat = enum {
             c.SDL_GPU_TEXTUREFORMAT_D32_FLOAT => .D32_Float,
             else => {
                 log.err(@src(), "format {}", .{sdl_format});
-                return TextureError.UnknownTextureFormat;
+                return Texture.Error.UnknownTextureFormat;
             },
         };
     }
@@ -103,15 +97,15 @@ pub const TextureUsage = packed struct {
     }
 };
 
-pub const SamplerError = error{
-    FailedToCreate,
-    NoSamplerCreateInfoForSamplerTexture,
-};
-
 pub const SamplerCreateInfo = struct {};
 
 const Sampler = struct {
     sdl_sampler: *c.SDL_GPUSampler,
+
+    pub const Error = error{
+        FailedToCreate,
+        NoSamplerCreateInfoForSamplerTexture,
+    };
 
     pub fn init(gpu_device: *GpuDevice, create_info: SamplerCreateInfo) !@This() {
         _ = create_info;
@@ -137,7 +131,7 @@ const Sampler = struct {
                 @src(),
                 *c.SDL_GPUSampler,
                 c.SDL_CreateGPUSampler(gpu_device.sdl_gpu_device, &sampler_info),
-                SamplerError.FailedToCreate,
+                Error.FailedToCreate,
             ),
         };
     }
@@ -163,6 +157,12 @@ pub const Texture = struct {
     /// readonly, will only be created if usage is sampler
     sampler: ?Sampler,
 
+    pub const Error = error{
+        FailedToCreateGpuTexture,
+        InvalidTextureUsageCombination,
+        UnknownTextureFormat,
+    };
+
     /// sampler + graphics_storage_read or compute_storage_read is invalid and will return an error
     /// ONLY SEND IN SAMPLER CREATE INFO IF SAMPLER USAGE IS ENABLED
     pub fn init(
@@ -176,10 +176,10 @@ pub const Texture = struct {
         sample_count: SampleCount,
     ) !@This() {
         if (usage.sampler and (usage.graphics_storage_read or usage.compute_storage_read)) {
-            return TextureError.InvalidTextureUsageCombination;
+            return Error.InvalidTextureUsageCombination;
         }
 
-        if (usage.sampler and sampler_create_info == null) return SamplerError.NoSamplerCreateInfoForSamplerTexture;
+        if (usage.sampler and sampler_create_info == null) return Sampler.Error.NoSamplerCreateInfoForSamplerTexture;
 
         const gpu_tex_info = c.SDL_GPUTextureCreateInfo{
             .type = tex_type.toSdl(),
@@ -202,7 +202,7 @@ pub const Texture = struct {
                 @src(),
                 *c.SDL_GPUTexture,
                 c.SDL_CreateGPUTexture(gpu_device.sdl_gpu_device, &gpu_tex_info),
-                TextureError.FailedToCreateGpuTexture,
+                Error.FailedToCreateGpuTexture,
             ),
             .tex_type = tex_type,
             .format = format,

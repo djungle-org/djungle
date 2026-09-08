@@ -3,10 +3,6 @@ const std = @import("std");
 const c = @import("C").c;
 const log = @import("Logging");
 
-pub const ImageError = error{
-    FailedToLoad,
-};
-
 pub const Image = struct {
     /// readonly
     pixels: []u8,
@@ -14,6 +10,10 @@ pub const Image = struct {
     width: u32,
     /// readonly
     height: u32,
+
+    pub const Error = error{
+        FailedToLoad,
+    };
 
     pub fn init(path: [:0]const u8) !@This() {
         var width: c_int = undefined;
@@ -28,7 +28,7 @@ pub const Image = struct {
             c.STBI_rgb_alpha,
         ) orelse {
             log.err(@src(), "stbi_load failed: {s}", .{c.stbi_failure_reason()});
-            return ImageError.FailedToLoad;
+            return Error.FailedToLoad;
         };
 
         const w: usize = @intCast(width);

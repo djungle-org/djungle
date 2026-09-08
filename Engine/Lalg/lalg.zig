@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const VectorError = error{
+pub const Error = error{
     DivByZero,
 };
 
@@ -155,7 +155,7 @@ pub fn normalize(comptime VectorType: type, vec: VectorType) !VectorType {
     comptime assertVectorType(VectorType);
 
     const magnitude = mag(VectorType, vec);
-    if (magnitude == 0.0) return VectorError.DivByZero;
+    if (magnitude == 0.0) return Error.DivByZero;
 
     return scaleVec(VectorType, vec, 1 / magnitude);
 }
@@ -169,7 +169,7 @@ test "normalize" {
 
     vec = Vec3{ 0, 0, 0 };
 
-    try std.testing.expectError(VectorError.DivByZero, normalize(Vec3, vec));
+    try std.testing.expectError(Error.DivByZero, normalize(Vec3, vec));
 }
 
 pub fn transpose(comptime MatrixType: type, mat: MatrixType) MatrixType {

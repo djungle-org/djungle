@@ -7,24 +7,24 @@ const sdlCheck = @import("C").sdlCheck;
 const sdlCheckBool = @import("C").sdlCheckBool;
 const TextureFormat = @import("textures.zig").TextureFormat;
 
-pub const GpuDeviceError = error{
-    FailedToCreate,
-    FailedToClaimWindowForGpu,
-};
-
-/// Auto to auto choose driver, Vulkan for Linux, Direct3D12 for Windows, Metal for MacOS
-pub const GpuDriver = enum {
-    Auto,
-    Vulkan,
-    Direct3D12,
-    Metal,
-};
-
 pub const GpuDevice = struct {
     /// read only
     sdl_gpu_device: *c.SDL_GPUDevice,
 
-    pub fn init(gpu_driver: GpuDriver, debug_mode: bool, window: *const win.Window) !@This() {
+    pub const Error = error{
+        FailedToCreate,
+        FailedToClaimWindowForGpu,
+    };
+
+    /// Auto to auto choose driver, Vulkan for Linux, Direct3D12 for Windows, Metal for MacOS
+    pub const Driver = enum {
+        Auto,
+        Vulkan,
+        Direct3D12,
+        Metal,
+    };
+
+    pub fn init(gpu_driver: Driver, debug_mode: bool, window: *const win.Window) !@This() {
         const gpu_driver_name: ?[]const u8 = switch (gpu_driver) {
             .Auto => null,
             .Vulkan => "vulkan",
@@ -74,13 +74,13 @@ pub const GpuDevice = struct {
             @src(),
             *c.SDL_GPUDevice,
             c.SDL_CreateGPUDeviceWithProperties(props),
-            GpuDeviceError.FailedToCreate,
+            Error.FailedToCreate,
         );
 
         try sdlCheckBool(
             @src(),
             c.SDL_ClaimWindowForGPUDevice(sdl_gpu_device, window.sdl_window),
-            GpuDeviceError.FailedToClaimWindowForGpu,
+            Error.FailedToClaimWindowForGpu,
         );
 
         return .{

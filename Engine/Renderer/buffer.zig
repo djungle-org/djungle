@@ -4,7 +4,7 @@ const c = @import("C").c;
 const sdlCheck = @import("C").sdlCheck;
 const GpuDevice = @import("gpu_device.zig").GpuDevice;
 
-pub const BufferError = error{
+pub const Error = error{
     FailedToCreateGpuBuffer,
     FailedToCreateGpuTransferBuffer,
     FailedToMapTransferBuffer,
@@ -50,7 +50,7 @@ pub const Buffer = struct {
                 @src(),
                 *c.SDL_GPUBuffer,
                 c.SDL_CreateGPUBuffer(gpu_device.sdl_gpu_device, &gpu_buf_info),
-                BufferError.FailedToCreateGpuBuffer,
+                Error.FailedToCreateGpuBuffer,
             ),
             .size = size,
         };
@@ -91,7 +91,7 @@ pub const transfer = struct {
                     @src(),
                     *c.SDL_GPUTransferBuffer,
                     c.SDL_CreateGPUTransferBuffer(gpu_device.sdl_gpu_device, &transer_buf_info),
-                    BufferError.FailedToCreateGpuTransferBuffer,
+                    Error.FailedToCreateGpuTransferBuffer,
                 ),
             };
         }
@@ -105,7 +105,7 @@ pub const transfer = struct {
                 @src(),
                 *anyopaque,
                 c.SDL_MapGPUTransferBuffer(gpu_device.sdl_gpu_device, self.sdl_transfer_buffer, true),
-                BufferError.FailedToMapTransferBuffer,
+                Error.FailedToMapTransferBuffer,
             );
 
             const dest: [*]T = @ptrCast(@alignCast(mem));

@@ -8,16 +8,16 @@ const sdlCheckBool = @import("C").sdlCheckBool;
 const tex = @import("textures.zig");
 const TextureFormat = tex.TextureFormat;
 
-pub const CommandBufferError = error{
-    FailedToAcquire,
-    FailedToSubmit,
-    FailedToBeginCopyPass,
-    FailedToAcquireSwapchainTexture,
-};
-
 pub const CommandBuffer = struct {
     /// read only
     sdl_command_buffer: *c.SDL_GPUCommandBuffer,
+
+    pub const Error = error{
+        FailedToAcquire,
+        FailedToSubmit,
+        FailedToBeginCopyPass,
+        FailedToAcquireSwapchainTexture,
+    };
 
     pub fn acquire(gpu_device: *GpuDevice) !@This() {
         return .{
@@ -25,13 +25,13 @@ pub const CommandBuffer = struct {
                 @src(),
                 *c.SDL_GPUCommandBuffer,
                 c.SDL_AcquireGPUCommandBuffer(gpu_device.sdl_gpu_device),
-                CommandBufferError.FailedToAcquire,
+                Error.FailedToAcquire,
             ),
         };
     }
 
     pub fn submit(self: *@This()) !void {
-        try sdlCheckBool(@src(), c.SDL_SubmitGPUCommandBuffer(self.sdl_command_buffer), CommandBufferError.FailedToSubmit);
+        try sdlCheckBool(@src(), c.SDL_SubmitGPUCommandBuffer(self.sdl_command_buffer), Error.FailedToSubmit);
     }
 
     pub fn beginCopyPass(self: *@This()) !*c.SDL_GPUCopyPass {
@@ -39,7 +39,7 @@ pub const CommandBuffer = struct {
             @src(),
             *c.SDL_GPUCopyPass,
             c.SDL_BeginGPUCopyPass(self.sdl_command_buffer),
-            CommandBufferError.FailedToBeginCopyPass,
+            Error.FailedToBeginCopyPass,
         );
     }
 
@@ -57,10 +57,10 @@ pub const CommandBuffer = struct {
                 &swapchain_tex_width,
                 &swapchain_tex_height,
             ),
-            CommandBufferError.FailedToAcquireSwapchainTexture,
+            Error.FailedToAcquireSwapchainTexture,
         );
 
-        const texture = swapchain_tex orelse return CommandBufferError.FailedToAcquireSwapchainTexture;
+        const texture = swapchain_tex orelse return Error.FailedToAcquireSwapchainTexture;
 
         const format = try gpu_device.getSwapchainFormat(window);
         return tex.SwapchainTexture.init(texture, format, swapchain_tex_width, swapchain_tex_height);

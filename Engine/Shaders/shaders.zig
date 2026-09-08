@@ -2,9 +2,9 @@ const std = @import("std");
 const c = @import("C").c;
 const log = @import("Logging");
 
-const GpuDevice = @import("Renderer").dev.GpuDevice;
+const GpuDevice = @import("Renderer").gpu.GpuDevice;
 
-pub const ShaderError = error{
+pub const Error = error{
     FailedToCreateGpuShader,
     ShaderCompileFailed,
     FailedToGetShaderFromRegistry,
@@ -57,7 +57,7 @@ pub const ShaderFile = struct {
 
         if (result.term != .exited or result.term.exited != 0) {
             std.log.err("slangc stderr: {s}\n", .{result.stderr});
-            return ShaderError.ShaderCompileFailed;
+            return Error.ShaderCompileFailed;
         }
 
         return .{
@@ -122,7 +122,7 @@ pub const Shader = struct {
         return .{
             .sdl_gpu_shader = c.SDL_CreateGPUShader(gpu_device.sdl_gpu_device, &shader_info) orelse {
                 log.err(@src(), "{s}", .{c.SDL_GetError()});
-                return ShaderError.FailedToCreateGpuShader;
+                return Error.FailedToCreateGpuShader;
             },
             .kind = shader_kind,
         };
@@ -164,7 +164,7 @@ pub const ShaderRegistry = struct {
 
     pub fn get(self: *@This(), shader_name: []const u8) !Shader {
         return self.shader_map.get(shader_name) orelse {
-            return ShaderError.FailedToGetShaderFromRegistry;
+            return Error.FailedToGetShaderFromRegistry;
         };
     }
 };
@@ -202,7 +202,7 @@ pub fn loadShaders(io: std.Io, allocator: std.mem.Allocator, registry: *ShaderRe
         else if (std.mem.eql(u8, stage_name, "fragment"))
             .Fragment
         else
-            return ShaderError.InvalidShaderStage;
+            return Error.InvalidShaderStage;
 
         const parameters = parsed.value.object.get("parameters").?.array.items;
 
@@ -221,7 +221,7 @@ pub fn loadShaders(io: std.Io, allocator: std.mem.Allocator, registry: *ShaderRe
             } else if (std.mem.eql(u8, kind, "resource")) {
                 descriptor_counts.samplers += 1;
             } else {
-                return ShaderError.InvalidDescriptorKind;
+                return Error.InvalidDescriptorKind;
             }
         }
 

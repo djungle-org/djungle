@@ -12,7 +12,7 @@ const dq = @import("DeletionQueue");
 pub const buf = @import("buffer.zig");
 pub const img = @import("image.zig");
 pub const tex = @import("textures.zig");
-pub const dev = @import("gpu_device.zig");
+pub const gpu = @import("gpu_device.zig");
 pub const cmd = @import("command_buffer.zig");
 pub const msh = @import("mesh.zig");
 pub const mdl = @import("model.zig");
@@ -22,18 +22,6 @@ const sdlCheckBool = @import("C").sdlCheckBool;
 const Shader = sh.Shader;
 const ShaderKind = sh.ShaderKind;
 const ShaderRegistry = sh.ShaderRegistry;
-
-pub const RendererError = error{
-    FailedToCreateGpuDevice,
-    FailedToClaimWindowForGpu,
-    FailedToCreateGpuShader,
-    FailedToAcquireGpuCommandBuffer,
-    FailedToBeginGpuCopyPass,
-    FailedToSubmitGpuCommandBuffer,
-    FailedToCreateGpuGraphicsPipeline,
-    FailedToBeginRenderPass,
-    FailedToAcquireSwapchainTexture,
-};
 
 pub const ViewProj = struct {
     view: la.Mat4,
@@ -46,7 +34,7 @@ const ModelMatrix = struct {
 
 pub const Renderer = struct {
     /// readonly
-    gpu_device: dev.GpuDevice,
+    gpu_device: gpu.GpuDevice,
 
     /// internal
     delque: dq.DeletionQueue,
@@ -71,13 +59,25 @@ pub const Renderer = struct {
     /// internal
     material_cache: mdl.MaterialCache,
 
+    pub const Error = error{
+        FailedToCreateGpuDevice,
+        FailedToClaimWindowForGpu,
+        FailedToCreateGpuShader,
+        FailedToAcquireGpuCommandBuffer,
+        FailedToBeginGpuCopyPass,
+        FailedToSubmitGpuCommandBuffer,
+        FailedToCreateGpuGraphicsPipeline,
+        FailedToBeginRenderPass,
+        FailedToAcquireSwapchainTexture,
+    };
+
     pub fn init(
         self: *@This(),
         gpa: std.mem.Allocator,
         io: std.Io,
         path_resolver: *const core.PathResolver,
         window: *win.Window,
-        gpu_driver: dev.GpuDriver,
+        gpu_driver: gpu.GpuDevice.Driver,
         debug: bool,
         multisamples: tex.SampleCount,
     ) !void {
@@ -88,7 +88,7 @@ pub const Renderer = struct {
         self.window = window;
 
         self.gpu_device = try .init(gpu_driver, debug, self.window);
-        try self.delque.push(self.allocator, dev.GpuDevice.deinit, .{&self.gpu_device});
+        try self.delque.push(self.allocator, gpu.GpuDevice.deinit, .{&self.gpu_device});
 
         self.draw_queue = .empty;
         try self.delque.push(self.allocator, std.Deque(msh.DrawCall).deinit, .{ &self.draw_queue, self.allocator });
@@ -202,7 +202,7 @@ pub const Renderer = struct {
             @src(),
             *c.SDL_GPUGraphicsPipeline,
             c.SDL_CreateGPUGraphicsPipeline(self.gpu_device.sdl_gpu_device, &gfx_pipeline_info),
-            RendererError.FailedToCreateGpuGraphicsPipeline,
+            Error.FailedToCreateGpuGraphicsPipeline,
         );
 
         try self.delque.push(gpa, c.SDL_ReleaseGPUGraphicsPipeline, .{ self.gpu_device.sdl_gpu_device, self.graphics_pipeline });
@@ -271,7 +271,7 @@ pub const Renderer = struct {
                 1,
                 &depth_stencil_target_info,
             ),
-            RendererError.FailedToBeginRenderPass,
+            Error.FailedToBeginRenderPass,
         );
 
         const viewport = c.SDL_GPUViewport{

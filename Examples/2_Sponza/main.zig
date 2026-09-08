@@ -29,20 +29,26 @@ pub fn main(init: std.process.Init) !void {
     const path_resolver = try core.PathResolver.init(gpa, io);
     defer path_resolver.deinit(gpa);
 
+    const clock = std.Io.Clock.awake;
+    var t0 = clock.now(io);
+
     var renderer: rdr.Renderer = undefined;
     try renderer.init(gpa, io, &path_resolver, &window, .Auto, debug, ._4);
     defer renderer.deinit();
 
+    var t1 = clock.now(io);
+
+    log.info("renderer init took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
+
     const sponza_path = try path_resolver.resolvePath(gpa, .Assets, "sponza/Sponza.gltf");
     defer gpa.free(sponza_path);
 
-    const clock = std.Io.Clock.awake;
-    const t0 = clock.now(io);
+    t0 = clock.now(io);
 
     var sponza = try rdr.mdl.Model.init(sponza_path, gpa, &renderer, &path_resolver);
     defer sponza.deinit(gpa, &renderer);
 
-    const t1 = clock.now(io);
+    t1 = clock.now(io);
 
     log.info("model load took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
 

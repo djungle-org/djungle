@@ -10,19 +10,6 @@ const img = @import("image.zig");
 const tex = @import("textures.zig");
 const dev = @import("gpu_device.zig");
 
-pub const ModelError = error{
-    FailedToParseFile,
-    FailedToGetGltfParseData,
-    FailedToLoadBuffers,
-    MissingPositionAttributes,
-    MissingIndices,
-    CgltfAccessorFailedToReadUint,
-    MissingMaterial,
-    MissingMaterialTexture,
-    InvalidGltfPath,
-    MissingImageUri,
-};
-
 fn cgltfErrorText(cgltf_result: c_uint) []const u8 {
     return switch (cgltf_result) {
         c.cgltf_result_success => "success",
@@ -80,6 +67,19 @@ pub const Model = struct {
     /// internal
     meshes: []msh.Mesh,
 
+    pub const Error = error{
+        FailedToParseFile,
+        FailedToGetGltfParseData,
+        FailedToLoadBuffers,
+        MissingPositionAttributes,
+        MissingIndices,
+        CgltfAccessorFailedToReadUint,
+        MissingMaterial,
+        MissingMaterialTexture,
+        InvalidGltfPath,
+        MissingImageUri,
+    };
+
     pub fn init(gltf_path: [:0]const u8, gpa: std.mem.Allocator, renderer: *rdr.Renderer, path_resolver: *const core.PathResolver) !@This() {
         const cgltf_options = std.mem.zeroes(c.cgltf_options);
 
@@ -87,16 +87,16 @@ pub const Model = struct {
         var result = c.cgltf_parse_file(&cgltf_options, gltf_path, &data_opt);
         if (result != c.cgltf_result_success) {
             log.err(@src(), "{s}", .{cgltfErrorText(result)});
-            return ModelError.FailedToParseFile;
+            return Error.FailedToParseFile;
         }
 
-        const data = data_opt orelse return ModelError.FailedToGetGltfParseData;
+        const data = data_opt orelse return Error.FailedToGetGltfParseData;
         defer c.cgltf_free(data);
 
         result = c.cgltf_load_buffers(&cgltf_options, data, gltf_path);
         if (result != c.cgltf_result_success) {
             log.err(@src(), "{s}", .{cgltfErrorText(result)});
-            return ModelError.FailedToLoadBuffers;
+            return Error.FailedToLoadBuffers;
         }
 
         var primitive_count: usize = 0;
@@ -197,7 +197,7 @@ fn loadPrimitiveVertices(gpa: std.mem.Allocator, primitive: *const c.cgltf_primi
     defer if (colors) |col| gpa.free(col);
     defer if (uvs) |u| gpa.free(u);
 
-    const pos = positions orelse return ModelError.MissingPositionAttributes;
+    const pos = positions orelse return Model.Error.MissingPositionAttributes;
     const vertex_count = pos.len / 3; // vec3
 
     const vertices = try gpa.alloc(msh.Vertex, vertex_count);
@@ -229,14 +229,14 @@ fn loadPrimitiveVertices(gpa: std.mem.Allocator, primitive: *const c.cgltf_primi
 }
 
 fn loadPrimitiveIndices(gpa: std.mem.Allocator, primitive: *const c.cgltf_primitive) ![]const u32 {
-    const index_accessor = (primitive.indices orelse return ModelError.MissingIndices).*;
+    const index_accessor = (primitive.indices orelse return Model.Error.MissingIndices).*;
 
     const indices = try gpa.alloc(u32, index_accessor.count);
 
     for (0..index_accessor.count) |i| {
         var idx: c.cgltf_uint = undefined;
         if (c.cgltf_accessor_read_uint(primitive.indices, i, &idx, 1) == 0)
-            return ModelError.CgltfAccessorFailedToReadUint;
+            return Model.Error.CgltfAccessorFailedToReadUint;
 
         indices[i] = @intCast(idx);
     }
@@ -254,18 +254,18 @@ fn loadPrimitiveMaterial(
     cache: *MaterialCache,
     path_resolver: *const core.PathResolver,
 ) !*const msh.Material {
-    const material = primitive.material orelse return ModelError.MissingMaterial;
-    const base_col_tex = material.*.pbr_metallic_roughness.base_color_texture.texture orelse return ModelError.MissingMaterialTexture;
-    const cgltf_image = base_col_tex.*.image orelse return ModelError.MissingMaterialTexture;
+    const material = primitive.material orelse return Model.Error.MissingMaterial;
+    const base_col_tex = material.*.pbr_metallic_roughness.base_color_texture.texture orelse return Model.Error.MissingMaterialTexture;
+    const cgltf_image = base_col_tex.*.image orelse return Model.Error.MissingMaterialTexture;
 
     const image_idx = c.cgltf_image_index(data, cgltf_image);
 
     if (cache.getMaterial(image_idx)) |mat|
         return mat;
 
-    const gltf_dir = std.Io.Dir.path.dirname(gltf_path) orelse return ModelError.InvalidGltfPath;
+    const gltf_dir = std.Io.Dir.path.dirname(gltf_path) orelse return Model.Error.InvalidGltfPath;
 
-    const uri = cgltf_image.*.uri orelse return ModelError.MissingImageUri;
+    const uri = cgltf_image.*.uri orelse return Model.Error.MissingImageUri;
     const uri_slice = std.mem.span(uri);
 
     const img_path = try path_resolver.combine(gpa, gltf_dir, uri_slice);

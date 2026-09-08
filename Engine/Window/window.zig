@@ -4,16 +4,6 @@ const sdlCheck = @import("C").sdlCheck;
 const sdlCheckBool = @import("C").sdlCheckBool;
 const log = @import("Logging");
 
-pub const WindowError = error{
-    SdlInitFailed,
-    SdlWindowCreationFailed,
-    SdlSetHintFailed,
-    SdlCreateRendererFailed,
-    SdlRendererSetDrawColor,
-    SdlRendererClear,
-    SdlRenderPresent,
-};
-
 pub const Window = struct {
     /// read only
     sdl_window: *c.SDL_Window,
@@ -22,16 +12,26 @@ pub const Window = struct {
     /// read only
     height: u32,
 
-    pub fn init(width: u32, height: u32, name: [:0]const u8) !@This() {
-        try sdlCheckBool(@src(), c.SDL_Init(c.SDL_INIT_VIDEO), WindowError.SdlInitFailed);
+    pub const Error = error{
+        SdlInitFailed,
+        SdlWindowCreationFailed,
+        SdlSetHintFailed,
+        SdlCreateRendererFailed,
+        SdlRendererSetDrawColor,
+        SdlRendererClear,
+        SdlRenderPresent,
+    };
 
-        try sdlCheckBool(@src(), c.SDL_SetHint(c.SDL_HINT_APP_ID, name), WindowError.SdlSetHintFailed);
+    pub fn init(width: u32, height: u32, name: [:0]const u8) !@This() {
+        try sdlCheckBool(@src(), c.SDL_Init(c.SDL_INIT_VIDEO), Error.SdlInitFailed);
+
+        try sdlCheckBool(@src(), c.SDL_SetHint(c.SDL_HINT_APP_ID, name), Error.SdlSetHintFailed);
 
         const sdl_window = try sdlCheck(
             @src(),
             *c.SDL_Window,
             c.SDL_CreateWindow(name, @intCast(width), @intCast(height), c.SDL_WINDOW_RESIZABLE),
-            WindowError.SdlWindowCreationFailed,
+            Error.SdlWindowCreationFailed,
         );
 
         return Window{
