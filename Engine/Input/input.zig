@@ -76,17 +76,6 @@ pub const Input = struct {
         return self.state[@intCast(@intFromEnum(scancode))];
     }
 
-    // /// grab mouse state from Input fields
-    // pub fn updateMouseState(self: *@This()) void {
-    //     self.deltaMouseX = self.mouseX;
-    //     self.deltaMouseY = self.mouseY;
-    //
-    //     _ = c.SDL_GetMouseState(&self.mouseX, &self.mouseY);
-    //
-    //     self.deltaMouseX = self.mouseX - self.deltaMouseX;
-    //     self.deltaMouseY = self.mouseY - self.deltaMouseY;
-    // }
-
     /// call every frame, resets mouse deltas
     pub fn resetMouseState(self: *@This()) void {
         self.mouse_dx = 0;

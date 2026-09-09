@@ -108,6 +108,16 @@ pub fn build(b: *std.Build) !void {
     input.addImport("C", c);
     input.addImport("Window", window);
 
+    const events = b.addModule("Events", .{
+        .root_source_file = b.path("Events/events.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    events.addImport("C", c);
+    events.addImport("Window", window);
+    events.addImport("Input", input);
+
     const renderer = b.addModule("Renderer", .{
         .root_source_file = b.path("Renderer/renderer.zig"),
         .target = target,

@@ -7,6 +7,7 @@ const win = @import("Window");
 const log = @import("Logging");
 const ipt = @import("Input");
 const Time = @import("Time");
+const Events = @import("Events");
 const c = @import("C").c;
 
 const cam = @import("camera_controller.zig");
@@ -54,6 +55,7 @@ pub fn main(init: std.process.Init) !void {
     log.info("model load took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
 
     var time: Time = .{};
+    var events: Events = .{};
 
     var input = ipt.Input.init();
     try input.setCursorLockAndHide(&window, true);
@@ -63,15 +65,11 @@ pub fn main(init: std.process.Init) !void {
     var running = true;
     while (running) {
         input.resetMouseState();
+        running = try events.handleEvents(&window, &input);
+
         time.calculate(io, clock);
 
         // log.info("ms per frame: {}", .{time.ms_per_frame});
-
-        var event: c.SDL_Event = undefined;
-        while (c.SDL_PollEvent(&event)) {
-            if (!window.handleEvent(&event)) running = false;
-            input.handleEvent(&event);
-        }
 
         const model = lalg.mulMat(.{
             lalg.translate(.{ 0, 0, 100 }),
@@ -101,6 +99,6 @@ pub fn main(init: std.process.Init) !void {
 
         t1 = clock.now(io);
 
-        log.info("render took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
+        // log.info("render took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
     }
 }

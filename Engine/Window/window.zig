@@ -46,7 +46,18 @@ pub const Window = struct {
         c.SDL_Quit();
     }
 
-    pub fn handleEvent(_: *@This(), event: *const c.SDL_Event) bool {
-        return event.type != c.SDL_EVENT_QUIT;
+    pub fn handleEvent(self: *@This(), event: *const c.SDL_Event) bool {
+        switch (event.type) {
+            c.SDL_EVENT_QUIT => {
+                return false;
+            },
+            c.SDL_EVENT_WINDOW_RESIZED => {
+                self.width = @intCast(event.window.data1);
+                self.height = @intCast(event.window.data2);
+            },
+            else => {},
+        }
+
+        return true;
     }
 };
