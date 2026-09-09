@@ -41,10 +41,6 @@ pub const Scancode = blk: {
     break :blk @Enum(c_int, .exhaustive, field_names[0..count], field_values[0..count]);
 };
 
-pub const InputError = error{
-    FailedToSetLockAndHideCursor,
-};
-
 pub const Input = struct {
     /// readonly, use only after updated with updateMouseState()
     mouse_x: f32 = 0,
@@ -80,14 +76,6 @@ pub const Input = struct {
     pub fn resetMouseState(self: *@This()) void {
         self.mouse_dx = 0;
         self.mouse_dy = 0;
-    }
-
-    pub fn setCursorLockAndHide(_: *@This(), window: *win.Window, enable: bool) !void {
-        try c_util.sdlCheckBool(
-            @src(),
-            c.SDL_SetWindowRelativeMouseMode(window.sdl_window, enable),
-            InputError.FailedToSetLockAndHideCursor,
-        );
     }
 
     pub fn handleEvent(self: *@This(), event: *const c.SDL_Event) void {

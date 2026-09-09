@@ -7,7 +7,7 @@ const win = @import("Window");
 const log = @import("Logging");
 const ipt = @import("Input");
 const Time = @import("Time");
-const Events = @import("Events");
+const events = @import("Events");
 const c = @import("C").c;
 
 const cam = @import("camera_controller.zig");
@@ -55,12 +55,17 @@ pub fn main(init: std.process.Init) !void {
     log.info("model load took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
 
     var time: Time = .{};
-    var events: Events = .{};
 
     var input = ipt.Input.init();
-    try input.setCursorLockAndHide(&window, true);
 
     var camera: cam.Camera = .{};
+
+    try window.setCursorLockAndHide(true);
+
+    var view_proj = rdr.ViewProj{
+        .view = lalg.identityMat(lalg.Mat4),
+        .proj = lalg.identityMat(lalg.Mat4),
+    };
 
     var running = true;
     while (running) {
@@ -84,18 +89,20 @@ pub fn main(init: std.process.Init) !void {
             try renderer.queueDrawCall(draw_call);
         }
 
-        const vp_mat = try camera.moveAndLook(
-            input,
-            width,
-            height,
-            60,
-            0.01,
-            1000,
-            0.01,
-        );
+        if (window.focused) {
+            view_proj = try camera.moveAndLook(
+                input,
+                width,
+                height,
+                60,
+                0.01,
+                1000,
+                0.01,
+            );
+        }
 
         t0 = clock.now(io);
-        try renderer.render(&vp_mat);
+        try renderer.render(&view_proj);
 
         t1 = clock.now(io);
 
