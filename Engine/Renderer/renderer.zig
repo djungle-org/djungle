@@ -60,10 +60,6 @@ pub const Renderer = struct {
     /// internal
     material_cache: mdl.MaterialCache,
 
-    pub const Error = error{
-        FailedToBeginRenderPass,
-    };
-
     pub fn init(
         self: *@This(),
         gpa: std.mem.Allocator,
@@ -192,16 +188,9 @@ pub const Renderer = struct {
             .cycle = true,
         };
 
-        const render_pass = try sdlCheck(
-            @src(),
-            *c.SDL_GPURenderPass,
-            c.SDL_BeginGPURenderPass(
-                command_buffer.sdl_command_buffer,
-                &color_target_info,
-                1,
-                &depth_stencil_target_info,
-            ),
-            Error.FailedToBeginRenderPass,
+        const render_pass = try command_buffer.beginRenderPass(
+            &color_target_info,
+            &depth_stencil_target_info,
         );
 
         const viewport = c.SDL_GPUViewport{

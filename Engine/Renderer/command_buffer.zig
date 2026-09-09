@@ -16,6 +16,7 @@ pub const CommandBuffer = struct {
         FailedToAcquire,
         FailedToSubmit,
         FailedToBeginCopyPass,
+        FailedToBeginRenderPass,
         FailedToAcquireSwapchainTexture,
     };
 
@@ -40,6 +41,20 @@ pub const CommandBuffer = struct {
             *c.SDL_GPUCopyPass,
             c.SDL_BeginGPUCopyPass(self.sdl_command_buffer),
             Error.FailedToBeginCopyPass,
+        );
+    }
+
+    pub fn beginRenderPass(self: *@This(), color_target_info: *const c.SDL_GPUColorTargetInfo, depth_stencil_target_info: *const c.SDL_GPUDepthStencilTargetInfo) !*c.SDL_GPURenderPass {
+        return try sdlCheck(
+            @src(),
+            *c.SDL_GPURenderPass,
+            c.SDL_BeginGPURenderPass(
+                self.sdl_command_buffer,
+                color_target_info,
+                1,
+                depth_stencil_target_info,
+            ),
+            Error.FailedToBeginRenderPass,
         );
     }
 
