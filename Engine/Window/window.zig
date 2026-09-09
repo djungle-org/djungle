@@ -12,13 +12,14 @@ pub const Window = struct {
     /// readonly
     height: u32,
     /// readonly
-    focused: bool,
+    focused: bool = false,
 
     pub const Error = error{
         SdlInitFailed,
         SdlWindowCreationFailed,
         SdlSetHintFailed,
         FailedToSetLockAndHideCursor,
+        FailedToGetWindowSize,
     };
 
     pub fn init(width: u32, height: u32, name: [:0]const u8) !@This() {
@@ -62,8 +63,17 @@ pub const Window = struct {
                 return false;
             },
             c.SDL_EVENT_WINDOW_RESIZED => {
-                self.width = @intCast(event.window.data1);
-                self.height = @intCast(event.window.data2);
+                var w: c_int = undefined;
+                var h: c_int = undefined;
+
+                try sdlCheckBool(
+                    @src(),
+                    c.SDL_GetWindowSizeInPixels(self.sdl_window, &w, &h),
+                    Error.FailedToGetWindowSize,
+                );
+
+                self.width = @intCast(w);
+                self.height = @intCast(h);
             },
             c.SDL_EVENT_KEY_DOWN => {
                 if (event.key.scancode == c.SDL_SCANCODE_ESCAPE) {

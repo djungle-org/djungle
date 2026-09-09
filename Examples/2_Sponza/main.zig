@@ -14,6 +14,7 @@ const cam = @import("camera_controller.zig");
 
 const width = 1600;
 const height = 900;
+const target_aspect: f32 = @as(f32, width) / @as(f32, height);
 const app_name = "2_Sponza";
 
 const debug: bool = switch (@import("builtin").mode) {
@@ -35,7 +36,16 @@ pub fn main(init: std.process.Init) !void {
     var t0 = clock.now(io);
 
     var renderer: rdr.Renderer = undefined;
-    try renderer.init(gpa, io, &path_resolver, &window, .Auto, debug, ._4);
+    try renderer.init(
+        gpa,
+        io,
+        &path_resolver,
+        &window,
+        target_aspect,
+        .Auto,
+        debug,
+        ._4,
+    );
     defer renderer.deinit();
 
     var t1 = clock.now(io);
@@ -92,8 +102,7 @@ pub fn main(init: std.process.Init) !void {
         if (window.focused) {
             view_proj = try camera.moveAndLook(
                 input,
-                width,
-                height,
+                target_aspect,
                 60,
                 0.01,
                 1000,

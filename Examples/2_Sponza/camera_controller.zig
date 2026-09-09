@@ -10,7 +10,7 @@ pub const Camera = struct {
     yaw: f32 = 0,
     pitch: f32 = 0,
 
-    pub fn moveAndLook(self: *@This(), input: ipt.Input, width: f32, height: f32, fov_deg: f32, near: f32, far: f32, sensitivity: f32) !rdr.ViewProj {
+    pub fn moveAndLook(self: *@This(), input: ipt.Input, target_aspect: f32, fov_deg: f32, near: f32, far: f32, sensitivity: f32) !rdr.ViewProj {
         const world_up = la.Vec3{ 0, 1, 0 };
 
         self.yaw += input.mouse_dx * sensitivity;
@@ -43,7 +43,7 @@ pub const Camera = struct {
 
         return .{
             .view = try la.lookAt(self.pos, target, world_up),
-            .proj = la.perspective(width / height, std.math.degreesToRadians(fov_deg), near, far),
+            .proj = la.perspective(target_aspect, std.math.degreesToRadians(fov_deg), near, far),
         };
     }
 };

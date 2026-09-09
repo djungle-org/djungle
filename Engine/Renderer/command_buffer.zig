@@ -58,7 +58,8 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn waitAndAcquireSwapchainTexture(self: *@This(), gpu_device: *GpuDevice, window: *win.Window) !tex.SwapchainTexture {
+    /// if returns null, skip rendering for the frame, this means that the window has resized
+    pub fn waitAndAcquireSwapchainTexture(self: *@This(), gpu_device: *GpuDevice, window: *win.Window) !?tex.SwapchainTexture {
         var swapchain_tex: ?*c.SDL_GPUTexture = null;
         var swapchain_tex_width: u32 = undefined;
         var swapchain_tex_height: u32 = undefined;
@@ -75,10 +76,10 @@ pub const CommandBuffer = struct {
             Error.FailedToAcquireSwapchainTexture,
         );
 
-        const texture = swapchain_tex orelse return Error.FailedToAcquireSwapchainTexture;
+        const texture = swapchain_tex orelse return null;
 
         const format = try gpu_device.getSwapchainFormat(window);
-        return tex.SwapchainTexture.init(texture, format, swapchain_tex_width, swapchain_tex_height);
+        return try tex.SwapchainTexture.init(texture, format, swapchain_tex_width, swapchain_tex_height);
     }
 
     /// data must be in std140 layout conventions
