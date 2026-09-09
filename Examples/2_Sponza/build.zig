@@ -19,6 +19,7 @@ pub fn build(b: *std.Build) void {
     const logging = engine_dep.module("Logging");
     const input = engine_dep.module("Input");
     const core = engine_dep.module("Core");
+    const time = engine_dep.module("Time");
     const c = engine_dep.module("C");
 
     const exe = b.addExecutable(.{
@@ -39,6 +40,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("Logging", logging);
     exe.root_module.addImport("Input", input);
     exe.root_module.addImport("Core", core);
+    exe.root_module.addImport("Time", time);
     exe.root_module.addImport("C", c);
 
     // REQUIRED: in order to automatically compile shaders at build time

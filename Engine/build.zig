@@ -67,6 +67,12 @@ pub fn build(b: *std.Build) !void {
 
     core.addOptions("build_config", build_config);
 
+    const time = b.addModule("Time", .{
+        .root_source_file = b.path("Time/time.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const lalg = b.addModule("Lalg", .{
         .root_source_file = b.path("Lalg/lalg.zig"),
         .target = target,
@@ -118,6 +124,7 @@ pub fn build(b: *std.Build) !void {
     renderer.addImport("Window", window);
     renderer.addImport("Shaders", shaders);
     renderer.addImport("Core", core);
+    renderer.addImport("Time", time);
 
     for ([_]*std.Build.Module{ window, renderer, deletion_queue, c, shaders }) |m| {
         m.addImport("Logging", logging);
