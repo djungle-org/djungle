@@ -26,6 +26,7 @@ VSOutput vertMain(VSInput input) {
   output.pos =
       mul(viewProj.proj,
           mul(viewProj.view, mul(model.model, float4(input.pos, 1.0))));
+  output.fragPos = mul(model.model, float4(input.pos, 1.0)).xyz;
 
   output.col = input.col;
   output.uv = input.uv;
