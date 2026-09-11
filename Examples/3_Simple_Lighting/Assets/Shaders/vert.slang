@@ -15,8 +15,9 @@ ConstantBuffer<Model> model;
 
 struct VSInput {
   float3 pos;
-  float3 col;
+  float4 col;
   float2 uv;
+  float3 normal;
 };
 
 [shader("vertex")]
@@ -28,5 +29,6 @@ VSOutput vertMain(VSInput input) {
 
   output.col = input.col;
   output.uv = input.uv;
+  output.normal = input.normal;
   return output;
 }

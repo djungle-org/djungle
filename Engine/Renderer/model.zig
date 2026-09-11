@@ -28,6 +28,7 @@ fn cgltfErrorText(cgltf_result: c_uint) []const u8 {
 
 pub const MaterialCache = struct {
     /// to prevent duplicate texture loading
+    /// keyed by gltf material index
     loaded_materials: std.AutoHashMap(usize, *msh.Material),
 
     pub fn init(gpa: std.mem.Allocator) !@This() {
@@ -59,6 +60,27 @@ pub const MaterialCache = struct {
 
         return mat_ptr;
     }
+
+    pub fn createWhiteTexture(_: *@This(), gpu_device: *dev.GpuDevice, copy_pass: *c.SDL_GPUCopyPass) !tex.Texture {
+        var texture = try tex.Texture.init(
+            gpu_device,
+            ._2d,
+            .R8G8B8A8_Unorm,
+            .{ .sampler = true },
+            .{},
+            1,
+            1,
+            ._1,
+        );
+
+        const white_pixel = [_]u8{ 255, 255, 255, 255 };
+
+        var image = img.Image.initFromPixels(&white_pixel, 1, 1);
+
+        try texture.upload(gpu_device, copy_pass, &image);
+
+        return texture;
+    }
 };
 
 /// zig wrapper around cgltf.h
@@ -72,10 +94,11 @@ pub const Model = struct {
         FailedToGetGltfParseData,
         FailedToLoadBuffers,
         MissingPositionAttributes,
+        MissingNormalsAttributes,
         MissingIndices,
         CgltfAccessorFailedToReadUint,
         MissingMaterial,
-        MissingMaterialTexture,
+        MissingMaterialImage,
         InvalidGltfPath,
         MissingImageUri,
     };
@@ -167,6 +190,7 @@ fn loadPrimitiveVertices(gpa: std.mem.Allocator, primitive: *const c.cgltf_primi
     var positions: ?[]f32 = null;
     var colors: ?[]f32 = null;
     var uvs: ?[]f32 = null;
+    var normals: ?[]f32 = null;
 
     for (attributes) |attr| {
         const accessor = attr.data;
@@ -189,6 +213,11 @@ fn loadPrimitiveVertices(gpa: std.mem.Allocator, primitive: *const c.cgltf_primi
                 _ = c.cgltf_accessor_unpack_floats(accessor, floats.ptr, total_floats);
                 uvs = floats;
             },
+            c.cgltf_attribute_type_normal => {
+                const floats = try gpa.alloc(f32, total_floats);
+                _ = c.cgltf_accessor_unpack_floats(accessor, floats.ptr, total_floats);
+                normals = floats;
+            },
             else => continue,
         }
     }
@@ -196,8 +225,11 @@ fn loadPrimitiveVertices(gpa: std.mem.Allocator, primitive: *const c.cgltf_primi
     defer if (positions) |p| gpa.free(p);
     defer if (colors) |col| gpa.free(col);
     defer if (uvs) |u| gpa.free(u);
+    defer if (normals) |n| gpa.free(n);
 
     const pos = positions orelse return Model.Error.MissingPositionAttributes;
+    const norms = normals orelse return Model.Error.MissingNormalsAttributes;
+
     const vertex_count = pos.len / 3; // vec3
 
     const vertices = try gpa.alloc(msh.Vertex, vertex_count);
@@ -207,9 +239,20 @@ fn loadPrimitiveVertices(gpa: std.mem.Allocator, primitive: *const c.cgltf_primi
         const py = pos[i * 3 + 1];
         const pz = pos[i * 3 + 2];
 
-        // var r: f32 = 0;
-        // var g: f32 = 0;
-        // var b: f32 = 0;
+        const nx = norms[i * 3 + 0];
+        const ny = norms[i * 3 + 1];
+        const nz = norms[i * 3 + 2];
+
+        var r: f32 = 1;
+        var g: f32 = 1;
+        var b: f32 = 1;
+        var a: f32 = 1;
+        if (colors) |color_buf| {
+            r = color_buf[i * 4 + 0];
+            g = color_buf[i * 4 + 1];
+            b = color_buf[i * 4 + 2];
+            a = color_buf[i * 4 + 3];
+        }
 
         var u: f32 = 0;
         var v: f32 = 0;
@@ -220,8 +263,11 @@ fn loadPrimitiveVertices(gpa: std.mem.Allocator, primitive: *const c.cgltf_primi
 
         vertices[i] = .{
             .pos = .{ px, py, pz },
-            .col = .{ 1, 1, 1 },
-            .uv = .{ u, v },
+            .normal = .{ nx, ny, nz },
+            .col = if (colors) |_| .{ r, g, b, a } else .{ 1, 1, 1, 1 },
+            .uv = if (uvs) |_| .{ u, v } else .{ 0, 0 },
+
+            .has_uv = if (uvs) |_| true else false,
         };
     }
 
@@ -255,12 +301,16 @@ fn loadPrimitiveMaterial(
     path_resolver: *const core.PathResolver,
 ) !*const msh.Material {
     const material = primitive.material orelse return Model.Error.MissingMaterial;
-    const base_col_tex = material.*.pbr_metallic_roughness.base_color_texture.texture orelse return Model.Error.MissingMaterialTexture;
-    const cgltf_image = base_col_tex.*.image orelse return Model.Error.MissingMaterialTexture;
 
-    const image_idx = c.cgltf_image_index(data, cgltf_image);
+    const material_idx = c.cgltf_material_index(data, material);
 
-    if (cache.getMaterial(image_idx)) |mat|
+    const base_col_tex = material.*.pbr_metallic_roughness.base_color_texture.texture orelse {
+        const mat = try msh.Material.init(try cache.createWhiteTexture(gpu_device, copy_pass));
+        return cache.putMaterial(gpa, material_idx, mat);
+    };
+    const cgltf_image = base_col_tex.*.image orelse return Model.Error.MissingMaterialImage;
+
+    if (cache.getMaterial(material_idx)) |mat|
         return mat;
 
     const gltf_dir = std.Io.Dir.path.dirname(gltf_path) orelse return Model.Error.InvalidGltfPath;
@@ -289,5 +339,5 @@ fn loadPrimitiveMaterial(
 
     const mat = try msh.Material.init(texture);
 
-    return try cache.putMaterial(gpa, image_idx, mat);
+    return try cache.putMaterial(gpa, material_idx, mat);
 }

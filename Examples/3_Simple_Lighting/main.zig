@@ -15,7 +15,7 @@ const cam = @import("camera_controller.zig");
 const width = 1600;
 const height = 900;
 const target_aspect: f32 = @as(f32, width) / @as(f32, height);
-const app_name = "2_Sponza";
+const app_name = "3_Simple_Lighting";
 
 const debug: bool = switch (@import("builtin").mode) {
     .Debug, .ReleaseSafe => true,
@@ -81,8 +81,9 @@ pub fn main(init: std.process.Init) !void {
         // log.info("ms per frame: {}", .{time.ms_per_frame});
 
         const model = lalg.mulMat(.{
-            lalg.translate(.{ 0, 0, 100 }),
-            lalg.scale(.{ 0.1, 0.1, 0.1 }),
+            lalg.translate(.{ 0, 0, 0 }),
+            lalg.scale(.{ 10, 10, 10 }),
+            try lalg.rotate(.{ 1, 0, 0 }, std.math.degreesToRadians(-90)),
         });
 
         var draw_call: rdr.msh.DrawCall = undefined;
@@ -101,6 +102,7 @@ pub fn main(init: std.process.Init) !void {
                 0.01,
                 1000,
                 0.01,
+                0.02,
             );
         }
 

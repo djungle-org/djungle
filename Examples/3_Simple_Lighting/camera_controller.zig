@@ -10,7 +10,16 @@ pub const Camera = struct {
     yaw: f32 = 0,
     pitch: f32 = 0,
 
-    pub fn moveAndLook(self: *@This(), input: ipt.Input, target_aspect: f32, fov_deg: f32, near: f32, far: f32, sensitivity: f32) !rdr.ViewProj {
+    pub fn moveAndLook(
+        self: *@This(),
+        input: ipt.Input,
+        target_aspect: f32,
+        fov_deg: f32,
+        near: f32,
+        far: f32,
+        sensitivity: f32,
+        move_speed: f32,
+    ) !rdr.ViewProj {
         const world_up = la.Vec3{ 0, 1, 0 };
 
         self.yaw += input.mouse_dx * sensitivity;
@@ -37,7 +46,7 @@ pub const Camera = struct {
         if (input.getKeyState(.SPACE)) dir += world_up;
         if (input.getKeyState(.LSHIFT)) dir -= world_up;
 
-        self.pos += dir;
+        self.pos += la.scaleVec(la.Vec3, dir, move_speed);
 
         const target = self.pos + forward;
 

@@ -29,10 +29,6 @@ pub const ViewProj = struct {
     proj: la.Mat4,
 };
 
-const ModelMatrix = struct {
-    model: la.Mat4,
-};
-
 pub const Renderer = struct {
     /// readonly
     gpu_device: gpu.GpuDevice,
@@ -104,8 +100,8 @@ pub const Renderer = struct {
         try self.delque.push(self.allocator, tex.Texture.deinit, .{ &self.col_tex, &self.gpu_device });
         try self.delque.push(self.allocator, tex.Texture.deinit, .{ &self.depth_tex, &self.gpu_device });
 
-        const vert_shader = try self.shaders.get("simple_vert");
-        const frag_shader = try self.shaders.get("simple_frag");
+        const vert_shader = try self.shaders.get("vert");
+        const frag_shader = try self.shaders.get("frag");
 
         self.gfx_pipeline = try gfx.GraphicsPipeline.init(
             &self.gpu_device,
@@ -252,19 +248,7 @@ pub const Renderer = struct {
         command_buffer.pushVertexUniformData(0, ViewProj, view_proj);
 
         while (self.draw_queue.popFront()) |draw_call| {
-            const model_mat = ModelMatrix{
-                .model = draw_call.model,
-            };
-
-            command_buffer.pushVertexUniformData(1, ModelMatrix, &model_mat);
-
-            const sampler_binding = c.SDL_GPUTextureSamplerBinding{
-                .texture = draw_call.material.texture.sdl_texture,
-                .sampler = draw_call.material.texture.sampler.?.sdl_sampler,
-            };
-
-            c.SDL_BindGPUFragmentSamplers(render_pass, 0, &sampler_binding, 1);
-
+            draw_call.pushModelMatrix(&command_buffer);
             draw_call.draw(render_pass);
         }
 

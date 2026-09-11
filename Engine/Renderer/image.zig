@@ -5,7 +5,7 @@ const log = @import("Logging");
 
 pub const Image = struct {
     /// readonly
-    pixels: []u8,
+    pixels: []const u8,
     /// readonly
     width: u32,
     /// readonly
@@ -43,7 +43,15 @@ pub const Image = struct {
         };
     }
 
+    pub fn initFromPixels(pixels: []const u8, width: u32, height: u32) @This() {
+        return .{
+            .pixels = pixels,
+            .width = @intCast(width),
+            .height = @intCast(height),
+        };
+    }
+
     pub fn deinit(self: *@This()) void {
-        c.stbi_image_free(@ptrCast(self.pixels.ptr));
+        c.stbi_image_free(@ptrCast(@constCast(self.pixels.ptr)));
     }
 };

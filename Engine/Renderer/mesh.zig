@@ -10,9 +10,11 @@ const tex = @import("textures.zig");
 
 pub const Vertex = struct {
     pos: la.Vec3,
-    col: la.Vec3,
-    uv: la.Vec2,
-    // normal: la.Vec3,
+    normal: la.Vec3,
+    col: la.Vec4 = .{ 1, 1, 1, 1 },
+    uv: la.Vec2 = .{ 0, 0 },
+
+    has_uv: bool = false,
 };
 
 pub const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
@@ -31,7 +33,7 @@ pub const vertex_attribs = [_]c.SDL_GPUVertexAttribute{
     .{ // col
         .location = 1,
         .buffer_slot = 0,
-        .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+        .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
         .offset = @offsetOf(Vertex, "col"),
     },
     .{ // uv
@@ -39,6 +41,12 @@ pub const vertex_attribs = [_]c.SDL_GPUVertexAttribute{
         .buffer_slot = 0,
         .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
         .offset = @offsetOf(Vertex, "uv"),
+    },
+    .{ // normal
+        .location = 3,
+        .buffer_slot = 0,
+        .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+        .offset = @offsetOf(Vertex, "normal"),
     },
 };
 
@@ -52,9 +60,28 @@ pub const DrawCall = struct {
     index_buf_binding: c.SDL_GPUBufferBinding,
     index_count: u32,
 
+    pub fn pushModelMatrix(self: *const @This(), command_buffer: *cmd.CommandBuffer) void {
+        const ModelMatrix = struct {
+            model: la.Mat4,
+        };
+
+        const model_mat = ModelMatrix{
+            .model = self.model,
+        };
+
+        command_buffer.pushVertexUniformData(1, ModelMatrix, &model_mat);
+    }
+
     pub fn draw(self: *const @This(), render_pass: *c.SDL_GPURenderPass) void {
         c.SDL_BindGPUVertexBuffers(render_pass, 0, &self.vertex_buf_binding, 1);
         c.SDL_BindGPUIndexBuffer(render_pass, &self.index_buf_binding, c.SDL_GPU_INDEXELEMENTSIZE_32BIT);
+
+        const sampler_binding = c.SDL_GPUTextureSamplerBinding{
+            .texture = self.material.texture.sdl_texture,
+            .sampler = self.material.texture.sampler.?.sdl_sampler,
+        };
+
+        c.SDL_BindGPUFragmentSamplers(render_pass, 0, &sampler_binding, 1);
 
         c.SDL_DrawGPUIndexedPrimitives(render_pass, self.index_count, 1, 0, 0, 0);
     }
