@@ -48,16 +48,16 @@ pub fn main(init: std.process.Init) !void {
     const bunny_path = try path_resolver.resolvePath(gpa, .Assets, "stanford_bunny/scene.gltf");
     defer gpa.free(bunny_path);
 
-    const clock = std.Io.Clock.awake;
-    const t0 = clock.now(io);
-
-    var bunny = try rdr.mdl.Model.init(bunny_path, gpa, &renderer, &path_resolver);
+    var bunny = try rdr.Model.init(bunny_path, gpa, &renderer, &path_resolver);
     defer bunny.deinit(gpa, &renderer);
 
-    const t1 = clock.now(io);
+    const light_ico_path = try path_resolver.resolvePath(gpa, .Assets, "light_icosphere/light_icosphere.gltf");
+    defer gpa.free(light_ico_path);
 
-    log.info("model load took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
+    var light_ico = try rdr.Model.init(light_ico_path, gpa, &renderer, &path_resolver);
+    defer light_ico.deinit(gpa, &renderer);
 
+    const clock = std.Io.Clock.awake;
     var time: Time = .{};
 
     var input = ipt.Input.init();
@@ -80,7 +80,7 @@ pub fn main(init: std.process.Init) !void {
 
         // log.info("ms per frame: {}", .{time.ms_per_frame});
 
-        const model = lalg.mulMat(.{
+        var model = lalg.mulMat(.{
             lalg.translate(.{ 0, 0, 0 }),
             lalg.scale(.{ 10, 10, 10 }),
             try lalg.rotate(.{ 1, 0, 0 }, std.math.degreesToRadians(-90)),
@@ -89,6 +89,21 @@ pub fn main(init: std.process.Init) !void {
         var draw_call: rdr.msh.DrawCall = undefined;
 
         for (bunny.meshes) |mesh| {
+            draw_call = mesh.drawCall(model);
+
+            try renderer.queueDrawCall(draw_call);
+        }
+
+        const timestamp = clock.now(io);
+        const now: f32 = @floatFromInt(timestamp.toMilliseconds());
+
+        const light_pos = lalg.Vec3{ 4 * @sin(now / 400), 0, 4 * @cos(now / 400) };
+
+        model = lalg.mulMat(.{
+            lalg.translate(light_pos),
+        });
+
+        for (light_ico.meshes) |mesh| {
             draw_call = mesh.drawCall(model);
 
             try renderer.queueDrawCall(draw_call);
@@ -106,6 +121,22 @@ pub fn main(init: std.process.Init) !void {
             );
         }
 
-        try renderer.render(&view_proj);
+        var command_buffer = try rdr.cmd.CommandBuffer.acquire(&renderer.gpu_device);
+
+        command_buffer.pushFragmentUniformData(
+            1,
+            struct { pos: lalg.Vec3 },
+            &.{ .pos = light_pos },
+        );
+
+        command_buffer.pushFragmentUniformData(
+            0,
+            struct { pos: lalg.Vec3 },
+            &.{ .pos = camera.pos },
+        );
+
+        try renderer.render(&command_buffer, &view_proj);
+
+        try command_buffer.submit();
     }
 }

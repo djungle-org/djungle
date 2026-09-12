@@ -9,6 +9,7 @@ ConstantBuffer<ViewProj> viewProj;
 
 struct Model {
   float4x4 model;
+  float3x3 model_normals;
 };
 [[vk_binding(1, 1)]]
 ConstantBuffer<Model> model;
@@ -30,6 +31,6 @@ VSOutput vertMain(VSInput input) {
 
   output.col = input.col;
   output.uv = input.uv;
-  output.normal = input.normal;
+  output.normal = mul(model.model_normals, input.normal);
   return output;
 }
