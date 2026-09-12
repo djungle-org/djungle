@@ -60,34 +60,36 @@ pub const MaterialCache = struct {
 
         return mat_ptr;
     }
-
-    pub fn createWhiteTexture(_: *@This(), gpu_device: *dev.GpuDevice, copy_pass: *c.SDL_GPUCopyPass) !tex.Texture {
-        var texture = try tex.Texture.init(
-            gpu_device,
-            ._2d,
-            .R8G8B8A8_Unorm,
-            .{ .sampler = true },
-            .{},
-            1,
-            1,
-            ._1,
-        );
-
-        const white_pixel = [_]u8{ 255, 255, 255, 255 };
-
-        var image = img.Image.initFromPixels(&white_pixel, 1, 1);
-
-        try texture.upload(gpu_device, copy_pass, &image);
-
-        return texture;
-    }
 };
+
+pub fn createWhiteTexture(gpu_device: *dev.GpuDevice, copy_pass: *c.SDL_GPUCopyPass) !tex.Texture {
+    var texture = try tex.Texture.init(
+        gpu_device,
+        ._2d,
+        .R8G8B8A8_Unorm,
+        .{ .sampler = true },
+        .{},
+        1,
+        1,
+        ._1,
+    );
+
+    const white_pixel = [_]u8{ 255, 255, 255, 255 };
+
+    var image = img.Image.initFromPixels(&white_pixel, 1, 1);
+
+    try texture.upload(gpu_device, copy_pass, &image);
+
+    return texture;
+}
 
 /// zig wrapper around cgltf.h
 /// meshes field meant to be read, but not modified
 pub const Model = struct {
     /// internal
     meshes: []msh.Mesh,
+    /// internal
+    material_cache: MaterialCache,
 
     pub const Error = error{
         FailedToParseFile,
@@ -135,6 +137,8 @@ pub const Model = struct {
 
         const copy_pass = try cmd_buf.beginCopyPass();
 
+        var material_cache = try MaterialCache.init(gpa);
+
         for (0..data.meshes_count) |i| {
             const c_mesh = data.meshes[i];
 
@@ -157,7 +161,7 @@ pub const Model = struct {
                         primitive,
                         data,
                         gltf_path,
-                        &renderer.material_cache,
+                        &material_cache,
                         path_resolver,
                     ),
                 );
@@ -172,6 +176,7 @@ pub const Model = struct {
 
         return .{
             .meshes = meshes,
+            .material_cache = material_cache,
         };
     }
 
@@ -181,6 +186,8 @@ pub const Model = struct {
         }
 
         gpa.free(self.meshes);
+
+        self.material_cache.deinit(gpa, renderer);
     }
 };
 
@@ -305,7 +312,7 @@ fn loadPrimitiveMaterial(
     const material_idx = c.cgltf_material_index(data, material);
 
     const base_col_tex = material.*.pbr_metallic_roughness.base_color_texture.texture orelse {
-        const mat = try msh.Material.init(try cache.createWhiteTexture(gpu_device, copy_pass));
+        const mat = try msh.Material.init(try createWhiteTexture(gpu_device, copy_pass));
         return cache.putMaterial(gpa, material_idx, mat);
     };
     const cgltf_image = base_col_tex.*.image orelse return Model.Error.MissingMaterialImage;

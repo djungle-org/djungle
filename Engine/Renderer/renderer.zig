@@ -17,6 +17,7 @@ pub const gfx = @import("graphics_pipeline.zig");
 pub const cmd = @import("command_buffer.zig");
 pub const msh = @import("mesh.zig");
 pub const mdl = @import("model.zig");
+pub const Model = mdl.Model;
 
 const sdlCheck = @import("C").sdlCheck;
 const sdlCheckBool = @import("C").sdlCheckBool;
@@ -57,8 +58,6 @@ pub const Renderer = struct {
     shaders: ShaderRegistry,
     /// internal
     draw_queue: std.Deque(msh.DrawCall),
-    /// internal
-    material_cache: mdl.MaterialCache,
 
     pub fn init(
         self: *@This(),
@@ -83,9 +82,6 @@ pub const Renderer = struct {
 
         self.draw_queue = .empty;
         try self.delque.push(self.allocator, std.Deque(msh.DrawCall).deinit, .{ &self.draw_queue, self.allocator });
-
-        self.material_cache = try .init(gpa);
-        try self.delque.push(self.allocator, mdl.MaterialCache.deinit, .{ &self.material_cache, self.allocator, self });
 
         self.shaders = try ShaderRegistry.init(gpa);
         try self.delque.push(self.allocator, ShaderRegistry.deinit, .{ &self.shaders, &self.gpu_device });
@@ -181,9 +177,7 @@ pub const Renderer = struct {
         };
     }
 
-    pub fn render(self: *@This(), view_proj: *const ViewProj) !void {
-        var command_buffer = try cmd.CommandBuffer.acquire(&self.gpu_device);
-
+    pub fn render(self: *@This(), command_buffer: *cmd.CommandBuffer, view_proj: *const ViewProj) !void {
         const swapchain_tex = try command_buffer.waitAndAcquireSwapchainTexture(&self.gpu_device, self.window) orelse {
             // if texture is null, window has resized, skip rendering
             return;
@@ -248,12 +242,10 @@ pub const Renderer = struct {
         command_buffer.pushVertexUniformData(0, ViewProj, view_proj);
 
         while (self.draw_queue.popFront()) |draw_call| {
-            draw_call.pushModelMatrix(&command_buffer);
+            try draw_call.pushModelMatrix(command_buffer);
             draw_call.draw(render_pass);
         }
 
         c.SDL_EndGPURenderPass(render_pass);
-
-        try command_buffer.submit();
     }
 };

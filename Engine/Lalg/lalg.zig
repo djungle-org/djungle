@@ -235,6 +235,59 @@ test "identity matrix" {
     try std.testing.expectEqual(identity, expected);
 }
 
+pub fn inverseMat3(mat: Mat3) !Mat3 {
+    const det = dot(Vec3, mat[0], cross(mat[1], mat[2]));
+    if (det == 0.0) return Error.DivByZero;
+
+    const row0 = scaleVec(Vec3, cross(mat[1], mat[2]), 1 / det);
+    const row1 = scaleVec(Vec3, cross(mat[2], mat[0]), 1 / det);
+    const row2 = scaleVec(Vec3, cross(mat[0], mat[1]), 1 / det);
+
+    return toColumns(Mat3, .{
+        row0,
+        row1,
+        row2,
+    });
+}
+
+test "matrix inverse, identity property" {
+    const mat = toColumns(Mat3, .{
+        .{ 2, 1, 0 },
+        .{ 0, 1, 3 },
+        .{ 1, 0, 2 },
+    });
+
+    const inv = try inverseMat3(mat);
+    const should_be_identity = mulMat(.{ mat, inv });
+
+    try std.testing.expectEqual(identityMat(Mat3), should_be_identity);
+}
+
+pub fn mat4ToMat3(mat: Mat4) Mat3 {
+    return .{
+        .{ mat[0][0], mat[0][1], mat[0][2] },
+        .{ mat[1][0], mat[1][1], mat[1][2] },
+        .{ mat[2][0], mat[2][1], mat[2][2] },
+    };
+}
+
+test "matrix4x4 to matrix3x3" {
+    const mat3 = mat4ToMat3(toColumns(Mat4, .{
+        .{ 3, 2, 1, 4 },
+        .{ 0, 4, 2, 1 },
+        .{ 1, 3, 4, 2 },
+        .{ 2, 1, 3, 4 },
+    }));
+
+    const expected = toColumns(Mat3, .{
+        .{ 3, 2, 1 },
+        .{ 0, 4, 2 },
+        .{ 1, 3, 4 },
+    });
+
+    try std.testing.expectEqual(mat3, expected);
+}
+
 pub fn addMat(comptime MatrixType: type, mat1: MatrixType, mat2: MatrixType) MatrixType {
     comptime assertMatrixType(MatrixType);
 
@@ -369,7 +422,7 @@ test "matrix multiply" {
         .{ 4, 6, 5 },
     });
 
-    var res = mulMat(Mat3, mat1, mat2);
+    var res = mulMat(.{ mat1, mat2 });
 
     var expected = toColumns(Mat3, .{
         .{ 28, 33, 29 },
@@ -380,7 +433,7 @@ test "matrix multiply" {
     try std.testing.expectEqual(expected, res);
 
     // non commutative
-    res = mulMat(Mat3, mat2, mat1);
+    res = mulMat(.{ mat2, mat1 });
 
     expected = toColumns(Mat3, .{
         .{ 25, 36, 29 },
@@ -419,7 +472,7 @@ test "matrix translate" {
         .{ 1, 1, 1, 1 },
     });
 
-    const translated = mulMat(Mat4, translation, mat);
+    const translated = mulMat(.{ translation, mat });
 
     expected = toColumns(Mat4, .{
         .{ 6, 5, 7, 4 },
@@ -562,7 +615,7 @@ test "matrix perspective" {
     const expected = toColumns(Mat4, .{
         .{ 0.5, 0, 0, 0 },
         .{ 0, 1, 0, 0 },
-        .{ 0, 0, -3, -4 },
+        .{ 0, 0, -2, -2 },
         .{ 0, 0, -1, 0 },
     });
 

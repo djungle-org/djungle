@@ -60,13 +60,15 @@ pub const DrawCall = struct {
     index_buf_binding: c.SDL_GPUBufferBinding,
     index_count: u32,
 
-    pub fn pushModelMatrix(self: *const @This(), command_buffer: *cmd.CommandBuffer) void {
+    pub fn pushModelMatrix(self: *const @This(), command_buffer: *cmd.CommandBuffer) !void {
         const ModelMatrix = struct {
             model: la.Mat4,
+            model_normals: la.Mat3,
         };
 
         const model_mat = ModelMatrix{
             .model = self.model,
+            .model_normals = la.transpose(la.Mat3, try la.inverseMat3(la.mat4ToMat3(self.model))),
         };
 
         command_buffer.pushVertexUniformData(1, ModelMatrix, &model_mat);
