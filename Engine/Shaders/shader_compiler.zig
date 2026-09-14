@@ -1,4 +1,5 @@
 const std = @import("std");
+const build_config = @import("build_config");
 
 const sh = @import("Shaders");
 
@@ -8,25 +9,56 @@ pub fn main(init: std.process.Init) !void {
 
     const args = try init.minimal.args.toSlice(arena);
 
-    const shader_src_path = args[1];
+    const game_shader_src_path = args[1];
     const compiled_shaders_path = args[2];
 
-    const shader_src_dir = try std.Io.Dir.openDirAbsolute(io, shader_src_path, .{});
-    defer shader_src_dir.close(io);
+    var binary_files = std.ArrayList(sh.ShaderBinary).empty;
 
-    const shaders_zon_buf = try shader_src_dir.readFileAlloc(io, "shaders.zon", arena, .unlimited);
+    // engine shaders
+    {
+        const eng_shader_src_dir = try std.Io.Dir.openDirAbsolute(io, build_config.engine_shaders_src_dir, .{});
+        defer eng_shader_src_dir.close(io);
 
-    const shaders_zon_buf_0 = try arena.dupeSentinel(u8, shaders_zon_buf, 0);
-    const shader_files = try std.zon.parse.fromSliceAlloc([]sh.ShaderFile, arena, shaders_zon_buf_0, null, .{});
+        const eng_shaders_zon_buf = try eng_shader_src_dir.readFileAlloc(io, "shaders.zon", arena, .unlimited);
+        const eng_shaders_zon_buf_0 = try arena.dupeSentinel(u8, eng_shaders_zon_buf, 0);
 
-    var binary_files = try std.ArrayList(sh.ShaderBinary).initCapacity(arena, shader_files.len);
+        const eng_shader_files = try std.zon.parse.fromSliceAlloc([]sh.ShaderFile, arena, eng_shaders_zon_buf_0, null, .{});
 
-    for (shader_files) |*shader_file| {
-        const binary = try shader_file.compile(arena, io, shader_src_path, compiled_shaders_path);
+        for (eng_shader_files) |*shader_file| {
+            const binary = try shader_file.compile(
+                arena,
+                io,
+                build_config.engine_shaders_src_dir,
+                compiled_shaders_path,
+            );
 
-        try binary_files.append(arena, binary);
+            try binary_files.append(arena, binary);
+        }
     }
 
+    // game shaders
+    {
+        const shader_src_dir = try std.Io.Dir.openDirAbsolute(io, game_shader_src_path, .{});
+        defer shader_src_dir.close(io);
+
+        const shaders_zon_buf = try shader_src_dir.readFileAlloc(io, "shaders.zon", arena, .unlimited);
+        const shaders_zon_buf_0 = try arena.dupeSentinel(u8, shaders_zon_buf, 0);
+
+        const shader_files = try std.zon.parse.fromSliceAlloc([]sh.ShaderFile, arena, shaders_zon_buf_0, null, .{});
+
+        for (shader_files) |*shader_file| {
+            const binary = try shader_file.compile(
+                arena,
+                io,
+                game_shader_src_path,
+                compiled_shaders_path,
+            );
+
+            try binary_files.append(arena, binary);
+        }
+    }
+
+    // writing to binaries zon
     const binaries_zon_path = try std.Io.Dir.path.join(arena, &.{ compiled_shaders_path, "shader_binaries.zon" });
     const binaries_zon = try std.Io.Dir.createFileAbsolute(io, binaries_zon_path, .{});
     defer binaries_zon.close(io);

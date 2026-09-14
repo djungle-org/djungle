@@ -1,0 +1,8 @@
+.{
+    // lit shaders
+    .{ .name = "lit.vert", .path = "lit/lit.vert.slang", .entry = "vertMain" },
+    .{ .name = "lit.frag", .path = "lit/lit.frag.slang", .entry = "fragMain" },
+    // unlit
+    .{ .name = "unlit.vert", .path = "unlit/unlit.vert.slang", .entry = "vertMain" },
+    .{ .name = "unlit.frag", .path = "unlit/unlit.frag.slang", .entry = "fragMain" },
+}

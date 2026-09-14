@@ -9,6 +9,7 @@ const cmd = @import("command_buffer.zig");
 const img = @import("image.zig");
 const tex = @import("textures.zig");
 const dev = @import("gpu_device.zig");
+const mats = @import("materials.zig");
 
 fn cgltfErrorText(cgltf_result: c_uint) []const u8 {
     return switch (cgltf_result) {
@@ -25,42 +26,6 @@ fn cgltfErrorText(cgltf_result: c_uint) []const u8 {
         else => "unknown cgltf error",
     };
 }
-
-pub const MaterialCache = struct {
-    /// to prevent duplicate texture loading
-    /// keyed by gltf material index
-    loaded_materials: std.AutoHashMap(usize, *msh.Material),
-
-    pub fn init(gpa: std.mem.Allocator) !@This() {
-        return .{
-            .loaded_materials = .init(gpa),
-        };
-    }
-
-    pub fn deinit(self: *@This(), gpa: std.mem.Allocator, renderer: *rdr.Renderer) void {
-        var iter = self.loaded_materials.valueIterator();
-
-        while (iter.next()) |mat_ptr| {
-            mat_ptr.*.deinit(renderer);
-            gpa.destroy(mat_ptr.*);
-        }
-
-        self.loaded_materials.deinit();
-    }
-
-    pub fn getMaterial(self: *@This(), key: usize) ?*const msh.Material {
-        return self.loaded_materials.get(key);
-    }
-
-    pub fn putMaterial(self: *@This(), gpa: std.mem.Allocator, key: usize, mat: msh.Material) !*const msh.Material {
-        const mat_ptr = try gpa.create(msh.Material);
-        mat_ptr.* = mat;
-
-        try self.loaded_materials.put(key, mat_ptr);
-
-        return mat_ptr;
-    }
-};
 
 pub fn createWhiteTexture(gpu_device: *dev.GpuDevice, copy_pass: *c.SDL_GPUCopyPass) !tex.Texture {
     var texture = try tex.Texture.init(
@@ -89,7 +54,7 @@ pub const Model = struct {
     /// internal
     meshes: []msh.Mesh,
     /// internal
-    material_cache: MaterialCache,
+    material_cache: mats.MaterialCache,
 
     pub const Error = error{
         FailedToParseFile,
@@ -137,7 +102,7 @@ pub const Model = struct {
 
         const copy_pass = try cmd_buf.beginCopyPass();
 
-        var material_cache = try MaterialCache.init(gpa);
+        var material_cache = try mats.MaterialCache.init(gpa);
 
         for (0..data.meshes_count) |i| {
             const c_mesh = data.meshes[i];
@@ -273,8 +238,6 @@ fn loadPrimitiveVertices(gpa: std.mem.Allocator, primitive: *const c.cgltf_primi
             .normal = .{ nx, ny, nz },
             .col = if (colors) |_| .{ r, g, b, a } else .{ 1, 1, 1, 1 },
             .uv = if (uvs) |_| .{ u, v } else .{ 0, 0 },
-
-            .has_uv = if (uvs) |_| true else false,
         };
     }
 
@@ -304,21 +267,27 @@ fn loadPrimitiveMaterial(
     primitive: *const c.cgltf_primitive,
     data: *const c.cgltf_data,
     gltf_path: []const u8,
-    cache: *MaterialCache,
+    cache: *mats.MaterialCache,
     path_resolver: *const core.PathResolver,
-) !*const msh.Material {
+) !*const mats.Material {
     const material = primitive.material orelse return Model.Error.MissingMaterial;
-
     const material_idx = c.cgltf_material_index(data, material);
-
-    const base_col_tex = material.*.pbr_metallic_roughness.base_color_texture.texture orelse {
-        const mat = try msh.Material.init(try createWhiteTexture(gpu_device, copy_pass));
-        return cache.putMaterial(gpa, material_idx, mat);
-    };
-    const cgltf_image = base_col_tex.*.image orelse return Model.Error.MissingMaterialImage;
 
     if (cache.getMaterial(material_idx)) |mat|
         return mat;
+
+    const gfx_pipeline_kind: rdr.GraphicsPipelineKind = if (material.*.unlit == 1) .Unlit else .Lit;
+
+    const base_col_tex = material.*.pbr_metallic_roughness.base_color_texture.texture orelse {
+        const mat = try mats.Material.init(
+            try createWhiteTexture(gpu_device, copy_pass),
+            material.*.pbr_metallic_roughness.base_color_factor,
+            gfx_pipeline_kind,
+        );
+        return cache.putMaterial(gpa, material_idx, mat);
+    };
+
+    const cgltf_image = base_col_tex.*.image orelse return Model.Error.MissingMaterialImage;
 
     const gltf_dir = std.Io.Dir.path.dirname(gltf_path) orelse return Model.Error.InvalidGltfPath;
 
@@ -344,7 +313,11 @@ fn loadPrimitiveMaterial(
 
     try texture.upload(gpu_device, copy_pass, &image);
 
-    const mat = try msh.Material.init(texture);
+    const mat = try mats.Material.init(
+        texture,
+        material.*.pbr_metallic_roughness.base_color_factor,
+        gfx_pipeline_kind,
+    );
 
     return try cache.putMaterial(gpa, material_idx, mat);
 }

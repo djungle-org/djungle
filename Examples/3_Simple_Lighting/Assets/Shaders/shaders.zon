@@ -1,4 +1,1 @@
-.{
-    .{ .name = "vert", .path = "vert.slang", .entry = "vertMain" },
-    .{ .name = "frag", .path = "frag.slang", .entry = "fragMain" },
-}
+.{}

@@ -2,7 +2,7 @@ const std = @import("std");
 const c = @import("C").c;
 const log = @import("Logging");
 
-const GpuDevice = @import("Renderer").gpu.GpuDevice;
+const GpuDevice = @import("Renderer").dev.GpuDevice;
 
 pub const Error = error{
     FailedToCreateGpuShader,

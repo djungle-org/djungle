@@ -11,8 +11,13 @@ pub fn build(b: *std.Build) !void {
         "Directory containing assets for the game",
     ) orelse b.path("."); // this dummy path should always be overrided by the game build.zig, only here to test build the engine standalone
 
+    const engine_shaders_src_dir = b.path("Shaders/EngineShadersSrc");
+
     const build_config = b.addOptions();
     build_config.addOptionPath("assets_dir", assets_dir);
+    build_config.addOptionPath("engine_shaders_src_dir", engine_shaders_src_dir);
+
+    const build_config_module = build_config.createModule();
 
     const shader_src_dir = b.option(
         std.Build.LazyPath,
@@ -65,7 +70,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
-    core.addOptions("build_config", build_config);
+    core.addImport("build_config", build_config_module);
 
     const time = b.addModule("Time", .{
         .root_source_file = b.path("Time/time.zig"),
@@ -152,6 +157,7 @@ pub fn build(b: *std.Build) !void {
         }),
     });
 
+    shader_compiler.root_module.addImport("build_config", build_config_module);
     shader_compiler.root_module.addImport("Shaders", shaders);
 
     b.installArtifact(shader_compiler);

@@ -3,6 +3,7 @@ const std = @import("std");
 const rdr = @import("Renderer");
 const la = @import("Lalg");
 const ipt = @import("Input");
+const log = @import("Logging");
 
 pub const Camera = struct {
     pos: la.Vec3 = .{ 0, 0, 0 },
@@ -25,8 +26,8 @@ pub const Camera = struct {
         self.yaw += input.mouse_dx * sensitivity;
         self.pitch = std.math.clamp(
             self.pitch - input.mouse_dy * sensitivity,
-            -89,
-            89,
+            -1.5,
+            1.5,
         );
 
         var forward = la.Vec3{ 0, 0, 0 };

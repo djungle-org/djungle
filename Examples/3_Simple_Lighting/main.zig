@@ -48,13 +48,13 @@ pub fn main(init: std.process.Init) !void {
     const bunny_path = try path_resolver.resolvePath(gpa, .Assets, "stanford_bunny/scene.gltf");
     defer gpa.free(bunny_path);
 
-    var bunny = try rdr.Model.init(bunny_path, gpa, &renderer, &path_resolver);
+    var bunny = try rdr.mdl.Model.init(bunny_path, gpa, &renderer, &path_resolver);
     defer bunny.deinit(gpa, &renderer);
 
     const light_ico_path = try path_resolver.resolvePath(gpa, .Assets, "light_icosphere/light_icosphere.gltf");
     defer gpa.free(light_ico_path);
 
-    var light_ico = try rdr.Model.init(light_ico_path, gpa, &renderer, &path_resolver);
+    var light_ico = try rdr.mdl.Model.init(light_ico_path, gpa, &renderer, &path_resolver);
     defer light_ico.deinit(gpa, &renderer);
 
     const clock = std.Io.Clock.awake;
@@ -97,7 +97,7 @@ pub fn main(init: std.process.Init) !void {
         const timestamp = clock.now(io);
         const now: f32 = @floatFromInt(timestamp.toMilliseconds());
 
-        const light_pos = lalg.Vec3{ 4 * @sin(now / 400), 0, 4 * @cos(now / 400) };
+        const light_pos = lalg.Vec3{ 4 * @sin(now / 400), 4 * @sin(now / 400), 4 * @cos(now / 400) };
 
         model = lalg.mulMat(.{
             lalg.translate(light_pos),
@@ -124,15 +124,15 @@ pub fn main(init: std.process.Init) !void {
         var command_buffer = try rdr.cmd.CommandBuffer.acquire(&renderer.gpu_device);
 
         command_buffer.pushFragmentUniformData(
-            1,
-            struct { pos: lalg.Vec3 },
-            &.{ .pos = light_pos },
-        );
-
-        command_buffer.pushFragmentUniformData(
             0,
             struct { pos: lalg.Vec3 },
             &.{ .pos = camera.pos },
+        );
+
+        command_buffer.pushFragmentUniformData(
+            1,
+            struct { pos: lalg.Vec3 },
+            &.{ .pos = light_pos },
         );
 
         try renderer.render(&command_buffer, &view_proj);

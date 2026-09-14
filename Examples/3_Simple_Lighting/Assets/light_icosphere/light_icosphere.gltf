@@ -3,6 +3,9 @@
 		"generator":"Khronos glTF Blender I/O v5.2.40",
 		"version":"2.0"
 	},
+	"extensionsUsed":[
+		"KHR_materials_unlit"
+	],
 	"scene":0,
 	"scenes":[
 		{
@@ -21,10 +24,13 @@
 	"materials":[
 		{
 			"doubleSided":true,
-			"name":"Light",
+			"extensions":{
+				"KHR_materials_unlit":{}
+			},
+			"name":"Material.001",
 			"pbrMetallicRoughness":{
 				"metallicFactor":0,
-				"roughnessFactor":0.5
+				"roughnessFactor":0.9
 			}
 		}
 	],

@@ -7,14 +7,13 @@ const buf = @import("buffer.zig");
 const dev = @import("gpu_device.zig");
 const cmd = @import("command_buffer.zig");
 const tex = @import("textures.zig");
+const mat = @import("materials.zig");
 
 pub const Vertex = struct {
     pos: la.Vec3,
     normal: la.Vec3,
     col: la.Vec4 = .{ 1, 1, 1, 1 },
     uv: la.Vec2 = .{ 0, 0 },
-
-    has_uv: bool = false,
 };
 
 pub const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
@@ -54,7 +53,7 @@ pub const vertex_attribs = [_]c.SDL_GPUVertexAttribute{
 /// can be reused with new model matrices for multiple draw calls
 pub const DrawCall = struct {
     model: la.Mat4,
-    material: *const Material,
+    material: *const mat.Material,
 
     vertex_buf_binding: c.SDL_GPUBufferBinding,
     index_buf_binding: c.SDL_GPUBufferBinding,
@@ -79,56 +78,13 @@ pub const DrawCall = struct {
         c.SDL_BindGPUIndexBuffer(render_pass, &self.index_buf_binding, c.SDL_GPU_INDEXELEMENTSIZE_32BIT);
 
         const sampler_binding = c.SDL_GPUTextureSamplerBinding{
-            .texture = self.material.texture.sdl_texture,
-            .sampler = self.material.texture.sampler.?.sdl_sampler,
+            .texture = self.material.base_texture.sdl_texture,
+            .sampler = self.material.base_texture.sampler.?.sdl_sampler,
         };
 
         c.SDL_BindGPUFragmentSamplers(render_pass, 0, &sampler_binding, 1);
 
         c.SDL_DrawGPUIndexedPrimitives(render_pass, self.index_count, 1, 0, 0, 0);
-    }
-};
-
-pub const Material = struct {
-    texture: tex.Texture,
-
-    pub fn init(texture: tex.Texture) !@This() {
-        return .{
-            .texture = texture,
-        };
-    }
-
-    pub fn createFromFile(renderer: *rdr.Renderer, path: [:0]const u8, texture_format: tex.TextureFormat) !@This() {
-        var image = try rdr.img.Image.init(path);
-        defer image.deinit();
-
-        var texture = try tex.Texture.init(
-            &renderer.gpu_device,
-            ._2d,
-            texture_format,
-            .{ .sampler = true },
-            .{},
-            image.width,
-            image.height,
-            ._1,
-        );
-
-        var cmd_buf = try cmd.CommandBuffer.acquire(&renderer.gpu_device);
-        const copy_pass = try cmd_buf.beginCopyPass();
-
-        try texture.upload(&renderer.gpu_device, copy_pass, &image);
-
-        c.SDL_EndGPUCopyPass(copy_pass);
-
-        try cmd_buf.submit();
-
-        return .{
-            .texture = texture,
-        };
-    }
-
-    pub fn deinit(self: *@This(), renderer: *rdr.Renderer) void {
-        self.texture.deinit(&renderer.gpu_device);
     }
 };
 
@@ -144,9 +100,9 @@ pub const Mesh = struct {
     /// internal
     index_count: u32,
     /// internal
-    material: *const Material,
+    material: *const mat.Material,
 
-    pub fn init(self: *@This(), renderer: *rdr.Renderer, vertices: []const Vertex, indices: []const u32, material: *const Material) !void {
+    pub fn init(self: *@This(), renderer: *rdr.Renderer, vertices: []const Vertex, indices: []const u32, material: *const mat.Material) !void {
         self.index_count = @intCast(indices.len);
 
         self.material = material;
