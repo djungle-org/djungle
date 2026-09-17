@@ -282,6 +282,8 @@ fn loadPrimitiveMaterial(
         const mat = try mats.Material.init(
             try createWhiteTexture(gpu_device, copy_pass),
             material.*.pbr_metallic_roughness.base_color_factor,
+            material.*.pbr_metallic_roughness.metallic_factor,
+            material.*.pbr_metallic_roughness.roughness_factor,
             gfx_pipeline_kind,
         );
         return cache.putMaterial(gpa, material_idx, mat);
@@ -316,6 +318,8 @@ fn loadPrimitiveMaterial(
     const mat = try mats.Material.init(
         texture,
         material.*.pbr_metallic_roughness.base_color_factor,
+        material.*.pbr_metallic_roughness.metallic_factor,
+        material.*.pbr_metallic_roughness.roughness_factor,
         gfx_pipeline_kind,
     );
 

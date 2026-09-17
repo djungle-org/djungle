@@ -13,12 +13,17 @@ const cmd = @import("command_buffer.zig");
 pub const Material = struct {
     base_texture: tex.Texture,
     base_color_factor: lalg.Vec4,
+    metallic: f32,
+    roughness: f32,
+
     gfx_pipeline_kind: rdr.GraphicsPipelineKind,
 
-    pub fn init(base_texture: tex.Texture, base_color_factor: lalg.Vec4, gfx_pipeline_kind: rdr.GraphicsPipelineKind) !@This() {
+    pub fn init(base_texture: tex.Texture, base_color_factor: lalg.Vec4, metallic: f32, roughness: f32, gfx_pipeline_kind: rdr.GraphicsPipelineKind) !@This() {
         return .{
             .base_texture = base_texture,
             .base_color_factor = base_color_factor,
+            .metallic = metallic,
+            .roughness = roughness,
             .gfx_pipeline_kind = gfx_pipeline_kind,
         };
     }

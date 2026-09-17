@@ -196,12 +196,6 @@ pub const Renderer = struct {
         self.gpu_device = try .init(gpu_driver, debug, self.window);
         try self.delque.push(self.allocator, dev.GpuDevice.deinit, .{&self.gpu_device});
 
-        self.unlit_draw_queue = .empty;
-        try self.delque.push(self.allocator, std.Deque(msh.DrawCall).deinit, .{ &self.unlit_draw_queue, self.allocator });
-
-        self.lit_draw_queue = .empty;
-        try self.delque.push(self.allocator, std.Deque(msh.DrawCall).deinit, .{ &self.lit_draw_queue, self.allocator });
-
         self.shaders = try ShaderRegistry.init(gpa);
         try self.delque.push(self.allocator, ShaderRegistry.deinit, .{ &self.shaders, &self.gpu_device });
 
@@ -244,6 +238,12 @@ pub const Renderer = struct {
             &msh.vertex_attribs,
         );
         try self.delque.push(gpa, GraphicsPipeline.deinit, .{ &self.lit_gfx_pipeline, &self.gpu_device });
+
+        self.unlit_draw_queue = .empty;
+        try self.delque.push(self.allocator, std.Deque(msh.DrawCall).deinit, .{ &self.unlit_draw_queue, self.allocator });
+
+        self.lit_draw_queue = .empty;
+        try self.delque.push(self.allocator, std.Deque(msh.DrawCall).deinit, .{ &self.lit_draw_queue, self.allocator });
     }
 
     pub fn deinit(self: *@This()) void {
@@ -379,9 +379,9 @@ pub const Renderer = struct {
 
         // --- drawing
 
-        self.unlit_gfx_pipeline.bind(render_pass);
-
         command_buffer.pushVertexUniformData(0, ViewProj, view_proj);
+
+        self.unlit_gfx_pipeline.bind(render_pass);
 
         while (self.unlit_draw_queue.popFront()) |draw_call| {
             try draw_call.pushModelMatrix(command_buffer);
@@ -391,6 +391,20 @@ pub const Renderer = struct {
         self.lit_gfx_pipeline.bind(render_pass);
 
         while (self.lit_draw_queue.popFront()) |draw_call| {
+            command_buffer.pushFragmentUniformData(
+                2,
+                struct {
+                    base_color: la.Vec4,
+                    metallic: f32,
+                    roughness: f32,
+                },
+                &.{
+                    .base_color = draw_call.material.base_color_factor,
+                    .metallic = draw_call.material.metallic,
+                    .roughness = draw_call.material.roughness,
+                },
+            );
+
             try draw_call.pushModelMatrix(command_buffer);
             draw_call.draw(render_pass);
         }

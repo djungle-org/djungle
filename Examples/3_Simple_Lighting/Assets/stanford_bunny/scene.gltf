@@ -1,146 +1,126 @@
 {
-  "accessors": [
-    {
-      "bufferView": 1,
-      "componentType": 5126,
-      "count": 2609,
-      "max": [
-        0.06077880039811134,
-        0.0616791695356369,
-        0.18699601292610168
-      ],
-      "min": [
-        -0.09438042342662811,
-        -0.05871463939547539,
-        0.033309899270534515
-      ],
-      "type": "VEC3"
-    },
-    {
-      "bufferView": 1,
-      "byteOffset": 31308,
-      "componentType": 5126,
-      "count": 2609,
-      "max": [
-        0.999043881893158,
-        0.9992901086807251,
-        0.9992524981498718
-      ],
-      "min": [
-        -0.9994020462036133,
-        -0.9993988275527954,
-        -0.9999822378158569
-      ],
-      "type": "VEC3"
-    },
-    {
-      "bufferView": 0,
-      "componentType": 5125,
-      "count": 14904,
-      "type": "SCALAR"
-    }
-  ],
-  "asset": {
-    "extras": {
-      "author": "darwinsenior (https://sketchfab.com/darwinsenior)",
-      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
-      "source": "https://sketchfab.com/3d-models/stanford-bunny-43f266d6cd6e4c6888b9943557528c0f",
-      "title": "Stanford Bunny"
-    },
-    "generator": "Sketchfab-12.68.0",
-    "version": "2.0"
-  },
-  "bufferViews": [
-    {
-      "buffer": 0,
-      "byteLength": 59616,
-      "name": "floatBufferViews",
-      "target": 34963
-    },
-    {
-      "buffer": 0,
-      "byteLength": 62616,
-      "byteOffset": 59616,
-      "byteStride": 12,
-      "name": "floatBufferViews",
-      "target": 34962
-    }
-  ],
-  "buffers": [
-    {
-      "byteLength": 122232,
-      "uri": "scene.bin"
-    }
-  ],
-  "materials": [
-    {
-      "doubleSided": true,
-      "name": "material_0",
-      "pbrMetallicRoughness": {
-        "metallicFactor": 0.0,
-        "roughnessFactor": 0.6
-      }
-    }
-  ],
-  "meshes": [
-    {
-      "name": "Object_0",
-      "primitives": [
-        {
-          "attributes": {
-            "NORMAL": 1,
-            "POSITION": 0
-          },
-          "indices": 2,
-          "material": 0,
-          "mode": 4
-        }
-      ]
-    }
-  ],
-  "nodes": [
-    {
-      "children": [
-        1
-      ],
-      "matrix": [
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        2.220446049250313e-16,
-        -1.0,
-        0.0,
-        0.0,
-        1.0,
-        2.220446049250313e-16,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0
-      ],
-      "name": "Sketchfab_model"
-    },
-    {
-      "children": [
-        2
-      ],
-      "name": "55ae90b10c5c401ebb97a3808b2c07ac.obj.cleaner.materialmerger.gles"
-    },
-    {
-      "mesh": 0,
-      "name": "Object_2"
-    }
-  ],
-  "scene": 0,
-  "scenes": [
-    {
-      "name": "Sketchfab_Scene",
-      "nodes": [
-        0
-      ]
-    }
-  ]
+	"asset":{
+		"generator":"Khronos glTF Blender I/O v5.2.40",
+		"version":"2.0"
+	},
+	"scene":0,
+	"scenes":[
+		{
+			"name":"Scene",
+			"nodes":[
+				2
+			]
+		}
+	],
+	"nodes":[
+		{
+			"mesh":0,
+			"name":"Object_2"
+		},
+		{
+			"children":[
+				0
+			],
+			"name":"55ae90b10c5c401ebb97a3808b2c07ac.obj.cleaner.materialmerger.gles"
+		},
+		{
+			"children":[
+				1
+			],
+			"name":"Sketchfab_model",
+			"rotation":[
+				-0.70710688829422,
+				0,
+				0,
+				0.7071066498756409
+			]
+		}
+	],
+	"materials":[
+		{
+			"doubleSided":true,
+			"name":"material_0",
+			"pbrMetallicRoughness":{
+				"baseColorFactor":[
+					0.3837866187095642,
+					1,
+					0.15248911082744598,
+					1
+				],
+				"metallicFactor":0,
+				"roughnessFactor":0.1538461595773697
+			}
+		}
+	],
+	"meshes":[
+		{
+			"name":"Object_0",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":0,
+						"NORMAL":1
+					},
+					"indices":2,
+					"material":0
+				}
+			]
+		}
+	],
+	"accessors":[
+		{
+			"bufferView":0,
+			"componentType":5126,
+			"count":2515,
+			"max":[
+				0.06077880039811134,
+				0.0616791695356369,
+				0.18699601292610168
+			],
+			"min":[
+				-0.09438042342662811,
+				-0.05871463939547539,
+				0.033309899270534515
+			],
+			"type":"VEC3"
+		},
+		{
+			"bufferView":1,
+			"componentType":5126,
+			"count":2515,
+			"type":"VEC3"
+		},
+		{
+			"bufferView":2,
+			"componentType":5123,
+			"count":14934,
+			"type":"SCALAR"
+		}
+	],
+	"bufferViews":[
+		{
+			"buffer":0,
+			"byteLength":30180,
+			"byteOffset":0,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":30180,
+			"byteOffset":30180,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":29868,
+			"byteOffset":60360,
+			"target":34963
+		}
+	],
+	"buffers":[
+		{
+			"byteLength":90228,
+			"uri":"scene.bin"
+		}
+	]
 }
