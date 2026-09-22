@@ -12,15 +12,25 @@ const cmd = @import("command_buffer.zig");
 
 pub const Material = struct {
     base_texture: tex.Texture,
+    normal_texture: tex.Texture,
+
     base_color_factor: lalg.Vec4,
     metallic: f32,
     roughness: f32,
 
     gfx_pipeline_kind: rdr.GraphicsPipelineKind,
 
-    pub fn init(base_texture: tex.Texture, base_color_factor: lalg.Vec4, metallic: f32, roughness: f32, gfx_pipeline_kind: rdr.GraphicsPipelineKind) !@This() {
+    pub fn init(
+        base_texture: tex.Texture,
+        normal_texture: tex.Texture,
+        base_color_factor: lalg.Vec4,
+        metallic: f32,
+        roughness: f32,
+        gfx_pipeline_kind: rdr.GraphicsPipelineKind,
+    ) !@This() {
         return .{
             .base_texture = base_texture,
+            .normal_texture = normal_texture,
             .base_color_factor = base_color_factor,
             .metallic = metallic,
             .roughness = roughness,
@@ -28,37 +38,38 @@ pub const Material = struct {
         };
     }
 
-    pub fn createFromFile(renderer: *rdr.Renderer, path: [:0]const u8, texture_format: tex.TextureFormat) !@This() {
-        var image = try rdr.img.Image.init(path);
-        defer image.deinit();
-
-        var texture = try tex.Texture.init(
-            &renderer.gpu_device,
-            ._2d,
-            texture_format,
-            .{ .sampler = true },
-            .{},
-            image.width,
-            image.height,
-            ._1,
-        );
-
-        var cmd_buf = try cmd.CommandBuffer.acquire(&renderer.gpu_device);
-        const copy_pass = try cmd_buf.beginCopyPass();
-
-        try texture.upload(&renderer.gpu_device, copy_pass, &image);
-
-        c.SDL_EndGPUCopyPass(copy_pass);
-
-        try cmd_buf.submit();
-
-        return .{
-            .texture = texture,
-        };
-    }
+    // pub fn createFromFile(renderer: *rdr.Renderer, path: [:0]const u8, texture_format: tex.TextureFormat) !@This() {
+    //     var image = try rdr.img.Image.init(path);
+    //     defer image.deinit();
+    //
+    //     var texture = try tex.Texture.init(
+    //         &renderer.gpu_device,
+    //         ._2d,
+    //         texture_format,
+    //         .{ .sampler = true },
+    //         .{},
+    //         image.width,
+    //         image.height,
+    //         ._1,
+    //     );
+    //
+    //     var cmd_buf = try cmd.CommandBuffer.acquire(&renderer.gpu_device);
+    //     const copy_pass = try cmd_buf.beginCopyPass();
+    //
+    //     try texture.upload(&renderer.gpu_device, copy_pass, &image);
+    //
+    //     c.SDL_EndGPUCopyPass(copy_pass);
+    //
+    //     try cmd_buf.submit();
+    //
+    //     return .{
+    //         .texture = texture,
+    //     };
+    // }
 
     pub fn deinit(self: *@This(), renderer: *rdr.Renderer) void {
         self.base_texture.deinit(&renderer.gpu_device);
+        self.normal_texture.deinit(&renderer.gpu_device);
     }
 };
 

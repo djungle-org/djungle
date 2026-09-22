@@ -77,12 +77,18 @@ pub const DrawCall = struct {
         c.SDL_BindGPUVertexBuffers(render_pass, 0, &self.vertex_buf_binding, 1);
         c.SDL_BindGPUIndexBuffer(render_pass, &self.index_buf_binding, c.SDL_GPU_INDEXELEMENTSIZE_32BIT);
 
-        const sampler_binding = c.SDL_GPUTextureSamplerBinding{
-            .texture = self.material.base_texture.sdl_texture,
-            .sampler = self.material.base_texture.sampler.?.sdl_sampler,
+        const sampler_bindings: [2]c.SDL_GPUTextureSamplerBinding = .{
+            .{ // base texture
+                .texture = self.material.base_texture.sdl_texture,
+                .sampler = self.material.base_texture.sampler.?.sdl_sampler,
+            },
+            .{ // normal texture
+                .texture = self.material.base_texture.sdl_texture,
+                .sampler = self.material.base_texture.sampler.?.sdl_sampler,
+            },
         };
 
-        c.SDL_BindGPUFragmentSamplers(render_pass, 0, &sampler_binding, 1);
+        c.SDL_BindGPUFragmentSamplers(render_pass, 0, &sampler_bindings, sampler_bindings.len);
 
         c.SDL_DrawGPUIndexedPrimitives(render_pass, self.index_count, 1, 0, 0, 0);
     }

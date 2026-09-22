@@ -213,6 +213,23 @@ pub const Texture = struct {
         };
     }
 
+    // pub fn init(path: [:0]const u8) !@This() {
+    //     var texture: *c.ktxTexture = undefined;
+    //     c.ktxTexture_CreateFromNamedFile(path, c.KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
+    //
+    //     return .{
+    //         .width = texture.baseWidth,
+    //         .height = texture.baseHeight,
+    //         .tex_type = if (texture.isArray) {
+    //             ._2dArray;
+    //         } else if (texture.isCubemap) {
+    //             .Cube;
+    //         } else {
+    //             ._2d;
+    //         },
+    //     };
+    // }
+
     pub fn deinit(self: *@This(), gpu_device: *GpuDevice) void {
         if (self.sampler) |*sampler| sampler.deinit(gpu_device);
 

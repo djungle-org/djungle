@@ -51,6 +51,12 @@ pub fn main(init: std.process.Init) !void {
     var bunny = try rdr.mdl.Model.init(bunny_path, gpa, &renderer, &path_resolver);
     defer bunny.deinit(gpa, &renderer);
 
+    const sponza_path = try path_resolver.resolvePath(gpa, .Assets, "pbr_sponza/NewSponza_Main_glTF_003.gltf");
+    defer gpa.free(sponza_path);
+
+    var sponza = try rdr.mdl.Model.init(sponza_path, gpa, &renderer, &path_resolver);
+    defer sponza.deinit(gpa, &renderer);
+
     const light_ico_path = try path_resolver.resolvePath(gpa, .Assets, "light_icosphere/light_icosphere.gltf");
     defer gpa.free(light_ico_path);
 
@@ -82,8 +88,8 @@ pub fn main(init: std.process.Init) !void {
 
         var model = lalg.mulMat(.{
             lalg.translate(.{ 0, 0, 0 }),
-            lalg.scale(.{ 10, 10, 10 }),
-            try lalg.rotate(.{ 1, 0, 0 }, std.math.degreesToRadians(-90)),
+            lalg.scale(.{ 100, 100, 100 }),
+            lalg.vecAlign(.{ 1, 0, 0 }, .{ 0, 1, 0 }),
         });
 
         var draw_call: rdr.msh.DrawCall = undefined;
@@ -94,10 +100,21 @@ pub fn main(init: std.process.Init) !void {
             try renderer.queueDrawCall(draw_call);
         }
 
+        model = lalg.mulMat(.{
+            lalg.translate(.{ 0, 0, 0 }),
+            lalg.scale(.{ 10, 10, 10 }),
+        });
+
+        for (sponza.meshes) |mesh| {
+            draw_call = mesh.drawCall(model);
+
+            try renderer.queueDrawCall(draw_call);
+        }
+
         const timestamp = clock.now(io);
         const now: f32 = @floatFromInt(timestamp.toMilliseconds());
 
-        const light_pos = lalg.Vec3{ 4 * @sin(now / 400), 4 * @sin(now / 400), 4 * @cos(now / 400) };
+        const light_pos = lalg.Vec3{ 100 * @sin(now / 400), 50, 0 };
 
         model = lalg.mulMat(.{
             lalg.translate(light_pos),
@@ -117,7 +134,7 @@ pub fn main(init: std.process.Init) !void {
                 0.01,
                 1000,
                 0.01,
-                0.02,
+                0.5,
             );
         }
 

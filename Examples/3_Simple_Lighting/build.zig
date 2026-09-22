@@ -4,12 +4,20 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // options
+    const ktx_path = b.option(
+        []const u8,
+        "ktx_path",
+        "Path to ktx-tools install (contains include/ and lib/)",
+    ) orelse null;
+
     // contains engine modules
     const engine_dep = b.dependency("Engine", .{
         .target = target,
         .optimize = optimize,
         .assets_dir = b.path("Assets"), // REQUIRED: the engine needs to know where assets are located
         .shader_src_dir = b.path("Assets/Shaders"), // REQUIRED: the engine needs to know where shaders are located
+        .ktx_path = ktx_path, // REQUIRED: path to libktx for textures
     });
 
     // grab whatever engine modules you need for your project

@@ -25,6 +25,13 @@ pub fn build(b: *std.Build) !void {
         "Directory containing shaders.zon and shader files",
     ) orelse b.path("."); // same here, this dummy path should always be overrided by the game build.zig, only here to test build the engine standalone
 
+    // will be found automatically on most systems, nixos requires providing this explicitly
+    const ktx_path = b.option(
+        []const u8,
+        "ktx_path",
+        "Path to ktx-tools install (contains include/ and lib/)",
+    ) orelse null;
+
     // engine module
 
     const vulkan = b.dependency("vulkan", .{
@@ -51,6 +58,15 @@ pub fn build(b: *std.Build) !void {
     });
 
     c.linkSystemLibrary("SDL3", .{ .needed = true });
+
+    if (ktx_path) |path| {
+        c.addIncludePath(.{ .cwd_relative = b.pathJoin(&.{ path, "include" }) });
+        c.addLibraryPath(.{ .cwd_relative = b.pathJoin(&.{ path, "lib" }) });
+        c.linkSystemLibrary("ktx", .{ .needed = true });
+    } else {
+        // uses system search paths
+        c.linkSystemLibrary("ktx", .{ .needed = true });
+    }
 
     const logging = b.addModule("Logging", .{
         .root_source_file = b.path("Logging/logging.zig"),

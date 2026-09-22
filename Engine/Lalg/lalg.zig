@@ -484,41 +484,27 @@ test "matrix translate" {
     try std.testing.expectEqual(expected, translated);
 }
 
-/// axis will be normalized
-pub fn rotate(axis: Vec3, radians: f32) !Mat4 {
-    const axis_n = try normalize(Vec3, axis);
+/// vectors must be unit vectors
+pub fn vecAlign(a: Vec3, b: Vec3) Mat4 {
+    const v = cross(a, b);
+    const c = dot(Vec3, a, b);
+    const k = 1.0 / (1.0 + c);
 
-    const axis_mat = toColumns(Mat3, .{
-        .{ 0, -axis_n[2], axis_n[1] },
-        .{ axis_n[2], 0, -axis_n[0] },
-        .{ -axis_n[1], axis_n[0], 0 },
-    });
-
-    const axis_mat_sqr = mulMat(.{ axis_mat, axis_mat });
-
-    const identity = identityMat(Mat3);
-    const sin = mulMatScalar(Mat3, axis_mat, @sin(radians));
-    const cos = mulMatScalar(Mat3, axis_mat_sqr, 1 - @cos(radians));
-
-    const rotation = addMat(Mat3, identity, addMat(Mat3, sin, cos));
-
-    const mat4 = toColumns(Mat4, .{
-        .{ rotation[0][0], rotation[1][0], rotation[2][0], 0 },
-        .{ rotation[0][1], rotation[1][1], rotation[2][1], 0 },
-        .{ rotation[0][2], rotation[1][2], rotation[2][2], 0 },
+    return toColumns(Mat4, .{
+        .{ v[0] * v[0] * k + c, v[1] * v[0] * k - v[2], v[2] * v[0] * k + v[1], 0 },
+        .{ v[0] * v[1] * k + v[2], v[1] * v[1] * k + c, v[2] * v[1] * k - v[0], 0 },
+        .{ v[0] * v[2] * k - v[1], v[1] * v[2] * k + v[0], v[2] * v[2] * k + c, 0 },
         .{ 0, 0, 0, 1 },
     });
-
-    return mat4;
 }
 
-test "matrix rotate" {
-    const rotated = try rotate(.{ 0, 0, 1 }, std.math.degreesToRadians(90));
+test "vec align matrix" {
+    const rotated = try vecAlign(.{ 0, 0, 1 }, .{ 0, 1, 0 });
 
     const expected = toColumns(Mat4, .{
-        .{ 0, -1, 0, 0 },
         .{ 1, 0, 0, 0 },
         .{ 0, 0, 1, 0 },
+        .{ 0, -1, 0, 0 },
         .{ 0, 0, 0, 1 },
     });
 

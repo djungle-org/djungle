@@ -260,6 +260,44 @@ fn loadPrimitiveIndices(gpa: std.mem.Allocator, primitive: *const c.cgltf_primit
     return indices;
 }
 
+fn gltfTextureToTexture(
+    gpa: std.mem.Allocator,
+    gpu_device: *dev.GpuDevice,
+    copy_pass: *c.SDL_GPUCopyPass,
+    gltf_tex: *c.cgltf_texture,
+    gltf_path: []const u8,
+    tex_format: tex.TextureFormat,
+    path_resolver: *const core.PathResolver,
+) !tex.Texture {
+    const cgltf_image = gltf_tex.*.image orelse return Model.Error.MissingMaterialImage;
+
+    const gltf_dir = std.Io.Dir.path.dirname(gltf_path) orelse return Model.Error.InvalidGltfPath;
+
+    const uri = cgltf_image.*.uri orelse return Model.Error.MissingImageUri;
+    const uri_slice = std.mem.span(uri);
+
+    const img_path = try path_resolver.combine(gpa, gltf_dir, uri_slice);
+    defer gpa.free(img_path);
+
+    var image = try img.Image.init(img_path);
+    defer image.deinit();
+
+    var texture = try tex.Texture.init(
+        gpu_device,
+        ._2d,
+        tex_format,
+        .{ .sampler = true },
+        .{},
+        image.width,
+        image.height,
+        ._1,
+    );
+
+    try texture.upload(gpu_device, copy_pass, &image);
+
+    return texture;
+}
+
 fn loadPrimitiveMaterial(
     gpa: std.mem.Allocator,
     gpu_device: *dev.GpuDevice,
@@ -278,45 +316,40 @@ fn loadPrimitiveMaterial(
 
     const gfx_pipeline_kind: rdr.GraphicsPipelineKind = if (material.*.unlit == 1) .Unlit else .Lit;
 
-    const base_col_tex = material.*.pbr_metallic_roughness.base_color_texture.texture orelse {
-        const mat = try mats.Material.init(
-            try createWhiteTexture(gpu_device, copy_pass),
-            material.*.pbr_metallic_roughness.base_color_factor,
-            material.*.pbr_metallic_roughness.metallic_factor,
-            material.*.pbr_metallic_roughness.roughness_factor,
-            gfx_pipeline_kind,
+    var base_tex: tex.Texture = undefined;
+    var normal_tex: tex.Texture = undefined;
+
+    if (material.*.pbr_metallic_roughness.base_color_texture.texture) |gltf_tex| {
+        base_tex = try gltfTextureToTexture(
+            gpa,
+            gpu_device,
+            copy_pass,
+            gltf_tex,
+            gltf_path,
+            .R8G8B8A8_Srgb,
+            path_resolver,
         );
-        return cache.putMaterial(gpa, material_idx, mat);
-    };
+    } else {
+        base_tex = try createWhiteTexture(gpu_device, copy_pass);
+    }
 
-    const cgltf_image = base_col_tex.*.image orelse return Model.Error.MissingMaterialImage;
-
-    const gltf_dir = std.Io.Dir.path.dirname(gltf_path) orelse return Model.Error.InvalidGltfPath;
-
-    const uri = cgltf_image.*.uri orelse return Model.Error.MissingImageUri;
-    const uri_slice = std.mem.span(uri);
-
-    const img_path = try path_resolver.combine(gpa, gltf_dir, uri_slice);
-    defer gpa.free(img_path);
-
-    var image = try img.Image.init(img_path);
-    defer image.deinit();
-
-    var texture = try tex.Texture.init(
-        gpu_device,
-        ._2d,
-        .R8G8B8A8_Srgb,
-        .{ .sampler = true },
-        .{},
-        image.width,
-        image.height,
-        ._1,
-    );
-
-    try texture.upload(gpu_device, copy_pass, &image);
+    if (material.*.normal_texture.texture) |gltf_tex| {
+        normal_tex = try gltfTextureToTexture(
+            gpa,
+            gpu_device,
+            copy_pass,
+            gltf_tex,
+            gltf_path,
+            .R8G8B8A8_Unorm,
+            path_resolver,
+        );
+    } else {
+        normal_tex = try createWhiteTexture(gpu_device, copy_pass);
+    }
 
     const mat = try mats.Material.init(
-        texture,
+        base_tex,
+        normal_tex,
         material.*.pbr_metallic_roughness.base_color_factor,
         material.*.pbr_metallic_roughness.metallic_factor,
         material.*.pbr_metallic_roughness.roughness_factor,

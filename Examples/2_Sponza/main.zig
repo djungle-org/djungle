@@ -32,9 +32,6 @@ pub fn main(init: std.process.Init) !void {
     const path_resolver = try core.PathResolver.init(gpa, io);
     defer path_resolver.deinit(gpa);
 
-    const clock = std.Io.Clock.awake;
-    var t0 = clock.now(io);
-
     var renderer: rdr.Renderer = undefined;
     try renderer.init(
         gpa,
@@ -48,23 +45,11 @@ pub fn main(init: std.process.Init) !void {
     );
     defer renderer.deinit();
 
-    var t1 = clock.now(io);
-
-    log.info("renderer init took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
-
     const sponza_path = try path_resolver.resolvePath(gpa, .Assets, "sponza/Sponza.gltf");
     defer gpa.free(sponza_path);
 
-    t0 = clock.now(io);
-
     var sponza = try rdr.mdl.Model.init(sponza_path, gpa, &renderer, &path_resolver);
     defer sponza.deinit(gpa, &renderer);
-
-    t1 = clock.now(io);
-
-    log.info("model load took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
-
-    var time: Time = .{};
 
     var input = ipt.Input.init();
 
@@ -81,10 +66,6 @@ pub fn main(init: std.process.Init) !void {
     while (running) {
         input.resetMouseState();
         running = try events.handleEvents(&window, &input);
-
-        time.calculate(io, clock);
-
-        // log.info("ms per frame: {}", .{time.ms_per_frame});
 
         const model = lalg.mulMat(.{
             lalg.translate(.{ 0, 0, 100 }),
@@ -110,11 +91,10 @@ pub fn main(init: std.process.Init) !void {
             );
         }
 
-        t0 = clock.now(io);
-        try renderer.render(&view_proj);
+        var command_buffer = try rdr.cmd.CommandBuffer.acquire(&renderer.gpu_device);
 
-        t1 = clock.now(io);
+        try renderer.render(&command_buffer, &view_proj);
 
-        // log.info("render took {d}ms", .{t1.toMilliseconds() - t0.toMilliseconds()});
+        try command_buffer.submit();
     }
 }
