@@ -35,22 +35,22 @@ pub const DeletionQueue = struct {
         if (func_params.len != args_fields.len)
             @compileError("Number of function params doesn't match the number of args sent in");
 
-        inline for (0..func_params.len) |i| {
-            comptime var func_param_type = func_params[i].type.?;
-            comptime var arg_field_type = args_fields[i].type;
-
-            if (@typeInfo(func_param_type) == .optional)
-                func_param_type = @typeInfo(func_param_type).optional.child;
-
-            if (@typeInfo(arg_field_type) == .optional)
-                arg_field_type = @typeInfo(arg_field_type).optional.child;
-
-            if (func_param_type != arg_field_type)
-                @compileError(std.fmt.comptimePrint(
-                    "Func paramater {} doesn't match argument type sent in: {s} vs {s}",
-                    .{ i, @typeName(func_param_type), @typeName(arg_field_type) },
-                ));
-        }
+        // inline for (0..func_params.len) |i| {
+        //     comptime var func_param_type = func_params[i].type.?;
+        //     comptime var arg_field_type = args_fields[i].type;
+        //
+        //     if (@typeInfo(func_param_type) == .optional)
+        //         func_param_type = @typeInfo(func_param_type).optional.child;
+        //
+        //     if (@typeInfo(arg_field_type) == .optional)
+        //         arg_field_type = @typeInfo(arg_field_type).optional.child;
+        //
+        //     if (func_param_type != arg_field_type)
+        //         @compileError(std.fmt.comptimePrint(
+        //             "Func paramater {} doesn't match argument type sent in: {s} vs {s}",
+        //             .{ i, @typeName(func_param_type), @typeName(arg_field_type) },
+        //         ));
+        // }
 
         const Closure = struct {
             args: Args,

@@ -4,7 +4,6 @@ const c = @import("C").c;
 const core = @import("Core");
 const win = @import("Window");
 const log = @import("Logging");
-const vk = @import("Vulkan");
 const la = @import("Lalg");
 const sh = @import("Shaders");
 const dq = @import("DeletionQueue");
@@ -18,6 +17,9 @@ pub const cmd = @import("command_buffer.zig");
 pub const msh = @import("mesh.zig");
 pub const mdl = @import("model.zig");
 pub const mats = @import("materials.zig");
+
+pub const vk = @import("Vulkan");
+pub const vktest = @import("vulkan.zig");
 
 const sdlCheck = @import("C").sdlCheck;
 const sdlCheckBool = @import("C").sdlCheckBool;
@@ -186,6 +188,11 @@ pub const Renderer = struct {
         debug: bool,
         multisamples: tex.SampleCount,
     ) !void {
+        // test vulkan
+        var vulkantest: vktest.Vulkan = undefined;
+        try vulkantest.init(gpa, debug, window, "test");
+        defer vulkantest.deinit();
+
         self.allocator = gpa;
 
         self.delque = try .initCapacity(self.allocator, 5);
