@@ -14,6 +14,8 @@ const log = @import("Logging");
 const TextureFormat = @import("textures.zig").TextureFormat;
 
 const Instance = vk.InstanceProxy;
+const Device = vk.DeviceProxy;
+const Queue = vk.QueueProxy;
 
 pub const Vulkan = struct {
     pub const Error = error{
@@ -48,6 +50,12 @@ pub const Vulkan = struct {
     surface: vk.SurfaceKHR,
 
     physical_device: vk.PhysicalDevice,
+    gfx_queue_family_idx: u32,
+
+    device_wrapper: vk.DeviceWrapper,
+    device: Device,
+
+    queue: Queue,
 
     /// PropertyType must be vk.LayerProperties or vk.ExtensionProperties
     fn allSupported(required: []const [:0]const u8, comptime PropertyType: type, properties: []const PropertyType) !bool {
@@ -78,19 +86,6 @@ pub const Vulkan = struct {
         return true;
     }
 
-    // /// c_array must have c_array_len valid elements
-    // fn cArrayToArrayList(gpa: std.mem.Allocator, comptime CType: type, comptime ZType: type, c_array: [*c]const CType, c_array_len: u32) !std.ArrayList(ZType) {
-    //     var array_list = try std.ArrayList(ZType).initCapacity(gpa, c_array_len);
-    //     array_list.items.len = c_array_len;
-    //
-    //     var i: u32 = 0;
-    //     while (i < c_array_len) : (i += 1) {
-    //         array_list.items[i] = @ptrCast(c_array[i]);
-    //     }
-    //
-    //     return array_list;
-    // }
-
     /// used for finding bits that are true within packed structs
     /// ex: vk.DebugUtilsMessageTypeFlagsEXT has many bools, so this function is for finding the one that is true
     fn findPackedStructFieldTrue(comptime StructType: type, packed_struct: StructType) ?[:0]const u8 {
@@ -101,6 +96,14 @@ pub const Vulkan = struct {
         }
 
         return null;
+    }
+
+    /// caller owns returned memory
+    fn sliceOfStringsToSliceOfManyItemPtr(allocator: std.mem.Allocator, strings: []const [:0]const u8) ![][*:0]const u8 {
+        const manyItemPtrs = try allocator.alloc([*:0]const u8, strings.len);
+        for (strings, 0..) |string, i| manyItemPtrs[i] = string.ptr;
+
+        return manyItemPtrs;
     }
 
     fn createInstance(self: *@This(), base_wrapper: vk.BaseWrapper, debug: bool, app_name: [:0]const u8) !void {
@@ -154,13 +157,11 @@ pub const Vulkan = struct {
 
         log.debug(@src(), "Found all required extensions", .{});
 
-        const layer_name_ptrs = try self.allocator.alloc([*:0]const u8, required_layers.items.len);
+        const layer_name_ptrs = try sliceOfStringsToSliceOfManyItemPtr(self.allocator, required_layers.items);
         defer self.allocator.free(layer_name_ptrs);
-        for (required_layers.items, 0..) |name, i| layer_name_ptrs[i] = name.ptr;
 
-        const ext_name_ptrs = try self.allocator.alloc([*:0]const u8, required_instance_extensions.len);
+        const ext_name_ptrs = try sliceOfStringsToSliceOfManyItemPtr(self.allocator, required_instance_extensions);
         defer self.allocator.free(ext_name_ptrs);
-        for (required_instance_extensions, 0..) |name, i| ext_name_ptrs[i] = name.ptr;
 
         const instance_info = vk.InstanceCreateInfo{
             .p_application_info = &app_info,
@@ -232,7 +233,7 @@ pub const Vulkan = struct {
         try self.deletion_queue.push(self.allocator, Instance.destroySurfaceKHR, .{ self.instance, self.surface, null });
     }
 
-    fn isPhysicalDeviceSuitable(self: *@This(), physical_device: *const vk.PhysicalDevice) !bool {
+    fn isPhysicalDeviceSuitable(self: *@This(), physical_device: *const vk.PhysicalDevice) !struct { bool, u32 } {
         const supports_targeted_api_version: bool =
             self.instance.getPhysicalDeviceProperties(physical_device.*).api_version >= api_version.toU32();
 
@@ -242,10 +243,18 @@ pub const Vulkan = struct {
         );
         defer self.allocator.free(queue_families_props);
 
-        var supports_graphics: bool = false;
-        for (queue_families_props) |queue_family_props| {
-            if (queue_family_props.queue_flags.contains(.{ .graphics_bit = true })) {
-                supports_graphics = true;
+        var supports_graphics_and_surfaces: bool = false;
+        var gfx_queue_family_idx: u32 = 0;
+        for (queue_families_props, 0..) |queue_family_props, i| {
+            const surface_support = .true == try self.instance.getPhysicalDeviceSurfaceSupportKHR(
+                physical_device.*,
+                @intCast(i),
+                self.surface,
+            );
+
+            if (queue_family_props.queue_flags.contains(.{ .graphics_bit = true }) and surface_support) {
+                supports_graphics_and_surfaces = true;
+                gfx_queue_family_idx = @intCast(i);
                 break;
             }
         }
@@ -270,12 +279,12 @@ pub const Vulkan = struct {
         var extended_dynamic_state_features_ext = vk.PhysicalDeviceExtendedDynamicStateFeaturesEXT{
             .p_next = &vulkan13features,
         };
-        var features2 = vk.PhysicalDeviceFeatures2{
+        var features = vk.PhysicalDeviceFeatures2{
             .features = .{},
             .p_next = &extended_dynamic_state_features_ext,
         };
 
-        self.instance.getPhysicalDeviceFeatures2(physical_device.*, &features2);
+        self.instance.getPhysicalDeviceFeatures2(physical_device.*, &features);
 
         const supports_required_features =
             vulkan11features.shader_draw_parameters == .true and
@@ -283,7 +292,10 @@ pub const Vulkan = struct {
             vulkan13features.dynamic_rendering == .true and
             extended_dynamic_state_features_ext.extended_dynamic_state == .true;
 
-        return supports_targeted_api_version and supports_graphics and supports_required_extensions and supports_required_features;
+        return .{
+            supports_targeted_api_version and supports_graphics_and_surfaces and supports_required_extensions and supports_required_features,
+            gfx_queue_family_idx,
+        };
     }
 
     fn choosePhysicalDevice(self: *@This()) !void {
@@ -291,13 +303,62 @@ pub const Vulkan = struct {
         defer self.allocator.free(physical_devices);
 
         for (physical_devices) |physical_device| {
-            if (try self.isPhysicalDeviceSuitable(&physical_device)) {
+            const suitable, const gfx_queue_family_idx = try self.isPhysicalDeviceSuitable(&physical_device);
+            if (suitable) {
                 self.physical_device = physical_device;
+                self.gfx_queue_family_idx = gfx_queue_family_idx;
                 return;
             }
         }
 
         return Error.FailedToFindSupportedGPU;
+    }
+
+    fn createLogicalDevice(self: *@This()) !void {
+        var vulkan11features = vk.PhysicalDeviceVulkan11Features{
+            .shader_draw_parameters = .true,
+        };
+        var vulkan13features = vk.PhysicalDeviceVulkan13Features{
+            .p_next = &vulkan11features,
+            .synchronization_2 = .true,
+            .dynamic_rendering = .true,
+        };
+        var extended_dynamic_state_features_ext = vk.PhysicalDeviceExtendedDynamicStateFeaturesEXT{
+            .p_next = &vulkan13features,
+            .extended_dynamic_state = .true,
+        };
+        var features = vk.PhysicalDeviceFeatures2{
+            .p_next = &extended_dynamic_state_features_ext,
+            .features = .{ .sampler_anisotropy = .true },
+        };
+
+        const queue_priority: f32 = 0.5; // priority for scheduling command buffer execution, needed even if there is one queue
+        const queue_create_info = vk.DeviceQueueCreateInfo{
+            .queue_family_index = self.gfx_queue_family_idx,
+            .queue_count = 1,
+            .p_queue_priorities = &.{queue_priority},
+        };
+
+        const ext_name_ptrs = try sliceOfStringsToSliceOfManyItemPtr(self.allocator, &required_extensions);
+        defer self.allocator.free(ext_name_ptrs);
+
+        const device_create_info = vk.DeviceCreateInfo{
+            .p_next = &features,
+            .queue_create_info_count = 1,
+            .p_queue_create_infos = &.{queue_create_info},
+            .enabled_extension_count = @intCast(ext_name_ptrs.len),
+            .pp_enabled_extension_names = ext_name_ptrs.ptr,
+        };
+
+        const device_handle = try self.instance.createDevice(self.physical_device, &device_create_info, null);
+        self.device_wrapper = vk.DeviceWrapper.load(device_handle, self.instance.wrapper.dispatch.vkGetDeviceProcAddr.?);
+
+        self.device = Device.init(device_handle, &self.device_wrapper);
+
+        try self.deletion_queue.push(self.allocator, Device.destroyDevice, .{ self.device, null });
+
+        const queue_handle = self.device.getDeviceQueue(self.gfx_queue_family_idx, 0);
+        self.queue = Queue.init(queue_handle, self.device.wrapper);
     }
 
     pub fn init(self: *@This(), gpa: std.mem.Allocator, debug_mode: bool, window: *win.Window, app_name: [:0]const u8) !void {
@@ -323,6 +384,7 @@ pub const Vulkan = struct {
 
         try self.createSurface();
         try self.choosePhysicalDevice();
+        try self.createLogicalDevice();
     }
 
     pub fn deinit(self: *@This()) void {
