@@ -25,9 +25,11 @@ pub const Vulkan = struct {
         LayerNotSupported,
         SdlGetVulkanInstanceExtensionsFailed,
         ExtensionNotSupported,
-        FailedToGetInstanceProcAddr,
         SdlVulkanCreateSurfaceFailed,
         FailedToFindSupportedGPU,
+        FailedToFindMatchingSwapchainSurfaceFormat,
+        SdlWaitEventFailed,
+        FailedToCreateVmaAllocator,
     };
 
     pub const api_version = vk.API_VERSION_1_3;
@@ -40,12 +42,14 @@ pub const Vulkan = struct {
 
     window: *win.Window,
 
+    event: *c.SDL_Event,
+
     deletion_queue: dq.DeletionQueue,
 
     instance_wrapper: vk.InstanceWrapper,
     instance: Instance,
 
-    debug_messenger: ?vk.DebugUtilsMessengerEXT = null,
+    debug_messenger: ?vk.DebugUtilsMessengerEXT,
 
     surface: vk.SurfaceKHR,
 
@@ -55,7 +59,15 @@ pub const Vulkan = struct {
     device_wrapper: vk.DeviceWrapper,
     device: Device,
 
+    vma_allocator: c.VmaAllocator,
+
     queue: Queue,
+
+    swapchain_extent: vk.Extent2D,
+    swapchain_surface_format: vk.SurfaceFormatKHR,
+    swapchain: vk.SwapchainKHR,
+    swapchain_images: []vk.Image,
+    swapchain_image_views: std.ArrayList(vk.ImageView),
 
     /// PropertyType must be vk.LayerProperties or vk.ExtensionProperties
     fn allSupported(required: []const [:0]const u8, comptime PropertyType: type, properties: []const PropertyType) !bool {
@@ -273,8 +285,11 @@ pub const Vulkan = struct {
         );
 
         var vulkan11features = vk.PhysicalDeviceVulkan11Features{};
-        var vulkan13features = vk.PhysicalDeviceVulkan13Features{
+        var vulkan12features = vk.PhysicalDeviceVulkan12Features{
             .p_next = &vulkan11features,
+        };
+        var vulkan13features = vk.PhysicalDeviceVulkan13Features{
+            .p_next = &vulkan12features,
         };
         var extended_dynamic_state_features_ext = vk.PhysicalDeviceExtendedDynamicStateFeaturesEXT{
             .p_next = &vulkan13features,
@@ -288,6 +303,7 @@ pub const Vulkan = struct {
 
         const supports_required_features =
             vulkan11features.shader_draw_parameters == .true and
+            vulkan12features.buffer_device_address == .true and
             vulkan13features.synchronization_2 == .true and
             vulkan13features.dynamic_rendering == .true and
             extended_dynamic_state_features_ext.extended_dynamic_state == .true;
@@ -318,8 +334,12 @@ pub const Vulkan = struct {
         var vulkan11features = vk.PhysicalDeviceVulkan11Features{
             .shader_draw_parameters = .true,
         };
-        var vulkan13features = vk.PhysicalDeviceVulkan13Features{
+        var vulkan12features = vk.PhysicalDeviceVulkan12Features{
             .p_next = &vulkan11features,
+            .buffer_device_address = .true,
+        };
+        var vulkan13features = vk.PhysicalDeviceVulkan13Features{
+            .p_next = &vulkan12features,
             .synchronization_2 = .true,
             .dynamic_rendering = .true,
         };
@@ -361,11 +381,191 @@ pub const Vulkan = struct {
         self.queue = Queue.init(queue_handle, self.device.wrapper);
     }
 
+    fn initVMA(self: *@This(), base_wrapper: vk.BaseWrapper) !void {
+        const vma_funcs = c.VmaVulkanFunctions{
+            .vkGetInstanceProcAddr = @ptrCast(base_wrapper.dispatch.vkGetInstanceProcAddr),
+            .vkGetDeviceProcAddr = @ptrCast(self.instance.wrapper.dispatch.vkGetDeviceProcAddr),
+        };
+
+        const vma_alloc_create_info = c.VmaAllocatorCreateInfo{
+            .flags = c.VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+            .physicalDevice = @ptrFromInt(@intFromEnum(self.physical_device)),
+            .device = @ptrFromInt(@intFromEnum(self.device.handle)),
+            .pVulkanFunctions = &vma_funcs,
+            .instance = @ptrFromInt(@intFromEnum(self.instance.handle)),
+            .vulkanApiVersion = api_version.toU32(),
+        };
+
+        const result = c.vmaCreateAllocator(&vma_alloc_create_info, &self.vma_allocator);
+        if (result != c.VK_SUCCESS)
+            return Error.FailedToCreateVmaAllocator;
+
+        try self.deletion_queue.push(self.allocator, c.vmaDestroyAllocator, .{self.vma_allocator});
+    }
+
+    fn chooseSwapchainSurfaceFormat(formats: []const vk.SurfaceFormatKHR) !vk.SurfaceFormatKHR {
+        for (formats) |format| {
+            if (format.format == .b8g8r8a8_srgb and format.color_space == .srgb_nonlinear_khr)
+                return format;
+        }
+
+        return Error.FailedToFindMatchingSwapchainSurfaceFormat;
+    }
+
+    fn chooseSwapchainPresentMode(present_modes: []const vk.PresentModeKHR) !vk.PresentModeKHR {
+        // fifo - image taken from front of swapchain every time display refreshes
+        // mailbox - like fifo, but when swapchain is full, old images are replaced with new ones
+        // which allows for displaying images as fast as possible
+
+        var found_fifo = false;
+        for (present_modes) |mode| {
+            if (mode == .fifo_khr)
+                found_fifo = true;
+
+            if (mode == .mailbox_khr)
+                return mode;
+        }
+
+        std.debug.assert(found_fifo);
+
+        return .fifo_khr;
+    }
+
+    fn chooseSwapchainExtent(self: *@This(), capabilities: *const vk.SurfaceCapabilitiesKHR) vk.Extent2D {
+        if (capabilities.current_extent.width != std.math.maxInt(u32))
+            return capabilities.current_extent;
+
+        return .{
+            .width = std.math.clamp(
+                self.window.width,
+                capabilities.min_image_extent.width,
+                capabilities.max_image_extent.width,
+            ),
+            .height = std.math.clamp(
+                self.window.height,
+                capabilities.min_image_extent.height,
+                capabilities.max_image_extent.height,
+            ),
+        };
+    }
+
+    fn chooseSwapcainMinImageCount(capabilities: *const vk.SurfaceCapabilitiesKHR) u32 {
+        var min_img_count = @max(3, capabilities.min_image_count);
+
+        if (capabilities.max_image_count > 0 and capabilities.max_image_count < min_img_count)
+            min_img_count = capabilities.max_image_count;
+
+        return min_img_count;
+    }
+
+    fn createImageView(self: *@This(), image: *const vk.Image, format: vk.Format) !vk.ImageView {
+        const create_info = vk.ImageViewCreateInfo{
+            .image = image.*,
+            .view_type = .@"2d",
+            .format = format,
+            .components = .{ .r = .r, .g = .g, .b = .b, .a = .a },
+            .subresource_range = .{
+                .aspect_mask = .{ .color_bit = true },
+                .base_mip_level = 0,
+                .level_count = 1,
+                .base_array_layer = 0,
+                .layer_count = 1,
+            },
+        };
+
+        return try self.device.createImageView(&create_info, null);
+    }
+
+    fn createImageViews(self: *@This()) !void {
+        std.debug.assert(self.swapchain_image_views.items.len == 0);
+
+        for (self.swapchain_images) |image| {
+            try self.swapchain_image_views.append(
+                self.allocator,
+                try self.createImageView(&image, self.swapchain_surface_format.format),
+            );
+
+            try self.deletion_queue.push(self.allocator, Device.destroyImageView, .{ self.device, self.swapchain_image_views.getLast(), null });
+        }
+    }
+
+    fn createSwapchain(self: *@This()) !void {
+        const surface_capabilities = try self.instance.getPhysicalDeviceSurfaceCapabilitiesKHR(self.physical_device, self.surface);
+        self.swapchain_extent = self.chooseSwapchainExtent(&surface_capabilities);
+        const min_img_count = chooseSwapcainMinImageCount(&surface_capabilities);
+
+        const available_formats = try self.instance.getPhysicalDeviceSurfaceFormatsAllocKHR(
+            self.physical_device,
+            self.surface,
+            self.allocator,
+        );
+        defer self.allocator.free(available_formats);
+
+        self.swapchain_surface_format = try chooseSwapchainSurfaceFormat(available_formats);
+
+        const available_present_modes = try self.instance.getPhysicalDeviceSurfacePresentModesAllocKHR(
+            self.physical_device,
+            self.surface,
+            self.allocator,
+        );
+        defer self.allocator.free(available_present_modes);
+
+        const present_mode = try chooseSwapchainPresentMode(available_present_modes);
+
+        const create_info = vk.SwapchainCreateInfoKHR{
+            .surface = self.surface,
+            .min_image_count = min_img_count,
+            .image_format = self.swapchain_surface_format.format,
+            .image_color_space = self.swapchain_surface_format.color_space,
+            .image_extent = self.swapchain_extent,
+            .image_array_layers = 1,
+            .image_usage = .{ .color_attachment_bit = true },
+            .image_sharing_mode = .exclusive,
+            .pre_transform = surface_capabilities.current_transform,
+            .composite_alpha = .{ .opaque_bit_khr = true },
+            .present_mode = present_mode,
+            .clipped = .true,
+            .old_swapchain = self.swapchain,
+        };
+
+        self.swapchain = try self.device.createSwapchainKHR(&create_info, null);
+
+        self.swapchain_images = try self.device.getSwapchainImagesAllocKHR(self.swapchain, self.allocator);
+
+        try self.deletion_queue.push(self.allocator, Device.destroySwapchainKHR, .{ self.device, self.swapchain, null });
+        try self.deletion_queue.push(self.allocator, std.mem.Allocator.free, .{ self.allocator, self.swapchain_images });
+    }
+
+    fn clearSwapchain(self: *@This()) void {
+        self.swapchain_image_views.clearRetainingCapacity();
+    }
+
+    fn recreateSwapchain(self: *@This()) !void {
+        while (self.window.width == 0 or self.window.height == 0) {
+            try sdlCheckBool(
+                @src(),
+                c.SDL_WaitEvent(&self.event),
+                Error.SdlWaitEventFailed,
+            );
+        }
+
+        self.device.deviceWaitIdle();
+
+        self.clearSwapchain();
+
+        try self.createSwapchain();
+        try self.createImageViews();
+    }
+
     pub fn init(self: *@This(), gpa: std.mem.Allocator, debug_mode: bool, window: *win.Window, app_name: [:0]const u8) !void {
         self.allocator = gpa;
         self.deletion_queue = try .initCapacity(self.allocator, 1);
 
         self.window = window;
+
+        self.debug_messenger = null;
+        self.swapchain_image_views = .empty;
+        self.swapchain = .null_handle;
 
         try sdlCheckBool(@src(), c.SDL_Vulkan_LoadLibrary(null), Error.SdlLoadVulkanLibraryFailed);
 
@@ -385,9 +585,14 @@ pub const Vulkan = struct {
         try self.createSurface();
         try self.choosePhysicalDevice();
         try self.createLogicalDevice();
+        try self.initVMA(base_wrapper);
+        try self.createSwapchain();
+        try self.createImageViews();
     }
 
     pub fn deinit(self: *@This()) void {
+        self.swapchain_image_views.deinit(self.allocator);
+
         self.deletion_queue.deinit(self.allocator);
     }
 

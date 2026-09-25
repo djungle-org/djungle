@@ -10,7 +10,13 @@ test:
 run:
     zig build run -freference-trace=0
 
+watch-run:
+    zig build run --watch -freference-trace=0
+
 # nixos run fallback, nix packages directories are different from zigs usual search paths
 # KTX_TOOLS_PATH env var set in flake.nix, it references pkgs.ktx_tools
 run-nix:
     zig build run -Dktx_path="$KTX_TOOLS_PATH" -freference-trace=0
+
+watch-run-nix:
+    zig build run -Dktx_path="$KTX_TOOLS_PATH" --watch -freference-trace=0

@@ -32,69 +32,74 @@ pub fn main(init: std.process.Init) !void {
     const path_resolver = try core.PathResolver.init(gpa, io);
     defer path_resolver.deinit(gpa);
 
-    var renderer: rdr.Renderer = undefined;
-    try renderer.init(
-        gpa,
-        io,
-        &path_resolver,
-        &window,
-        target_aspect,
-        .Auto,
-        debug,
-        ._4,
-    );
-    defer renderer.deinit();
+    // test vulkan
+    var vulkantest: rdr.vktest.Vulkan = undefined;
+    try vulkantest.init(gpa, debug, &window, "test");
+    defer vulkantest.deinit();
 
-    const sponza_path = try path_resolver.resolvePath(gpa, .Assets, "sponza/Sponza.gltf");
-    defer gpa.free(sponza_path);
-
-    var sponza = try rdr.mdl.Model.init(sponza_path, gpa, &renderer, &path_resolver);
-    defer sponza.deinit(gpa, &renderer);
-
-    var input = ipt.Input.init();
-
-    var camera: cam.Camera = .{};
-
-    try window.setCursorLockAndHide(true);
-
-    var view_proj = rdr.ViewProj{
-        .view = lalg.identityMat(lalg.Mat4),
-        .proj = lalg.identityMat(lalg.Mat4),
-    };
-
-    var running = true;
-    while (running) {
-        input.resetMouseState();
-        running = try events.handleEvents(&window, &input);
-
-        const model = lalg.mulMat(.{
-            lalg.translate(.{ 0, 0, 100 }),
-            lalg.scale(.{ 0.1, 0.1, 0.1 }),
-        });
-
-        var draw_call: rdr.msh.DrawCall = undefined;
-
-        for (sponza.meshes) |mesh| {
-            draw_call = mesh.drawCall(model);
-
-            try renderer.queueDrawCall(draw_call);
-        }
-
-        if (window.focused) {
-            view_proj = try camera.moveAndLook(
-                input,
-                target_aspect,
-                60,
-                0.01,
-                1000,
-                0.01,
-            );
-        }
-
-        var command_buffer = try rdr.cmd.CommandBuffer.acquire(&renderer.gpu_device);
-
-        try renderer.render(&command_buffer, &view_proj);
-
-        try command_buffer.submit();
-    }
+    // var renderer: rdr.Renderer = undefined;
+    // try renderer.init(
+    //     gpa,
+    //     io,
+    //     &path_resolver,
+    //     &window,
+    //     target_aspect,
+    //     .Auto,
+    //     debug,
+    //     ._4,
+    // );
+    // defer renderer.deinit();
+    //
+    // const sponza_path = try path_resolver.resolvePath(gpa, .Assets, "sponza/Sponza.gltf");
+    // defer gpa.free(sponza_path);
+    //
+    // var sponza = try rdr.mdl.Model.init(sponza_path, gpa, &renderer, &path_resolver);
+    // defer sponza.deinit(gpa, &renderer);
+    //
+    // var input = ipt.Input.init();
+    //
+    // var camera: cam.Camera = .{};
+    //
+    // try window.setCursorLockAndHide(true);
+    //
+    // var view_proj = rdr.ViewProj{
+    //     .view = lalg.identityMat(lalg.Mat4),
+    //     .proj = lalg.identityMat(lalg.Mat4),
+    // };
+    //
+    // var running = true;
+    // while (running) {
+    //     input.resetMouseState();
+    //     running = try events.handleEvents(&window, &input);
+    //
+    //     const model = lalg.mulMat(.{
+    //         lalg.translate(.{ 0, 0, 100 }),
+    //         lalg.scale(.{ 0.1, 0.1, 0.1 }),
+    //     });
+    //
+    //     var draw_call: rdr.msh.DrawCall = undefined;
+    //
+    //     for (sponza.meshes) |mesh| {
+    //         draw_call = mesh.drawCall(model);
+    //
+    //         try renderer.queueDrawCall(draw_call);
+    //     }
+    //
+    //     if (window.focused) {
+    //         view_proj = try camera.moveAndLook(
+    //             input,
+    //             target_aspect,
+    //             60,
+    //             0.01,
+    //             1000,
+    //             0.01,
+    //         );
+    //     }
+    //
+    //     var command_buffer = try rdr.cmd.CommandBuffer.acquire(&renderer.gpu_device);
+    //
+    //     try renderer.render(&command_buffer, &view_proj);
+    //
+    //     try command_buffer.submit();
+    // }
 }

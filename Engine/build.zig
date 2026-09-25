@@ -47,6 +47,8 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = b.path("c.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
     });
 
     c.addIncludePath(b.path("Vendor"));
@@ -55,6 +57,9 @@ pub fn build(b: *std.Build) !void {
     });
     c.addCSourceFile(.{
         .file = b.path("Vendor/cgltf_impl.c"),
+    });
+    c.addCSourceFile(.{
+        .file = b.path("Vendor/vk_mem_alloc_impl.cpp"),
     });
 
     c.linkSystemLibrary("SDL3", .{ .needed = true });
