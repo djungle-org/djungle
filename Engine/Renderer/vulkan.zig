@@ -9,9 +9,13 @@ const sdlCheckBool = c_util.sdlCheckBool;
 const vk = @import("Vulkan");
 const win = @import("Window");
 const dq = @import("DeletionQueue");
+const sh = @import("Shaders");
+const core = @import("Core");
+
 const log = @import("Logging");
 
-const TextureFormat = @import("textures.zig").TextureFormat;
+const tex = @import("textures.zig");
+const mesh = @import("mesh.zig");
 
 const Instance = vk.InstanceProxy;
 const Device = vk.DeviceProxy;
@@ -44,7 +48,7 @@ pub const Vulkan = struct {
 
     event: *c.SDL_Event,
 
-    deletion_queue: dq.DeletionQueue,
+    delque: dq.DeletionQueue,
 
     instance_wrapper: vk.InstanceWrapper,
     instance: Instance,
@@ -68,6 +72,12 @@ pub const Vulkan = struct {
     swapchain: vk.SwapchainKHR,
     swapchain_images: []vk.Image,
     swapchain_image_views: std.ArrayList(vk.ImageView),
+
+    descriptor_set_layout: vk.DescriptorSetLayout,
+
+    shaders: sh.ShaderRegistry,
+
+    gfx_pipeline: vk.Pipeline,
 
     /// PropertyType must be vk.LayerProperties or vk.ExtensionProperties
     fn allSupported(required: []const [:0]const u8, comptime PropertyType: type, properties: []const PropertyType) !bool {
@@ -191,7 +201,7 @@ pub const Vulkan = struct {
 
         self.instance = Instance.init(instance_handle, &self.instance_wrapper);
 
-        try self.deletion_queue.push(self.allocator, Instance.destroyInstance, .{ self.instance, null });
+        try self.delque.push(self.allocator, Instance.destroyInstance, .{ self.instance, null });
     }
 
     fn debugCallback(
@@ -223,7 +233,7 @@ pub const Vulkan = struct {
             null,
         );
 
-        try self.deletion_queue.push(self.allocator, Instance.destroyDebugUtilsMessengerEXT, .{ self.instance, self.debug_messenger.?, null });
+        try self.delque.push(self.allocator, Instance.destroyDebugUtilsMessengerEXT, .{ self.instance, self.debug_messenger.?, null });
     }
 
     fn createSurface(self: *@This()) !void {
@@ -242,7 +252,7 @@ pub const Vulkan = struct {
 
         self.surface = @enumFromInt(@intFromPtr(c_vk_surface));
 
-        try self.deletion_queue.push(self.allocator, Instance.destroySurfaceKHR, .{ self.instance, self.surface, null });
+        try self.delque.push(self.allocator, Instance.destroySurfaceKHR, .{ self.instance, self.surface, null });
     }
 
     fn isPhysicalDeviceSuitable(self: *@This(), physical_device: *const vk.PhysicalDevice) !struct { bool, u32 } {
@@ -306,6 +316,7 @@ pub const Vulkan = struct {
             vulkan12features.buffer_device_address == .true and
             vulkan13features.synchronization_2 == .true and
             vulkan13features.dynamic_rendering == .true and
+            vulkan13features.shader_demote_to_helper_invocation == .true and
             extended_dynamic_state_features_ext.extended_dynamic_state == .true;
 
         return .{
@@ -342,6 +353,7 @@ pub const Vulkan = struct {
             .p_next = &vulkan12features,
             .synchronization_2 = .true,
             .dynamic_rendering = .true,
+            .shader_demote_to_helper_invocation = .true,
         };
         var extended_dynamic_state_features_ext = vk.PhysicalDeviceExtendedDynamicStateFeaturesEXT{
             .p_next = &vulkan13features,
@@ -375,7 +387,7 @@ pub const Vulkan = struct {
 
         self.device = Device.init(device_handle, &self.device_wrapper);
 
-        try self.deletion_queue.push(self.allocator, Device.destroyDevice, .{ self.device, null });
+        try self.delque.push(self.allocator, Device.destroyDevice, .{ self.device, null });
 
         const queue_handle = self.device.getDeviceQueue(self.gfx_queue_family_idx, 0);
         self.queue = Queue.init(queue_handle, self.device.wrapper);
@@ -400,7 +412,7 @@ pub const Vulkan = struct {
         if (result != c.VK_SUCCESS)
             return Error.FailedToCreateVmaAllocator;
 
-        try self.deletion_queue.push(self.allocator, c.vmaDestroyAllocator, .{self.vma_allocator});
+        try self.delque.push(self.allocator, c.vmaDestroyAllocator, .{self.vma_allocator});
     }
 
     fn chooseSwapchainSurfaceFormat(formats: []const vk.SurfaceFormatKHR) !vk.SurfaceFormatKHR {
@@ -485,7 +497,7 @@ pub const Vulkan = struct {
                 try self.createImageView(&image, self.swapchain_surface_format.format),
             );
 
-            try self.deletion_queue.push(self.allocator, Device.destroyImageView, .{ self.device, self.swapchain_image_views.getLast(), null });
+            try self.delque.push(self.allocator, Device.destroyImageView, .{ self.device, self.swapchain_image_views.getLast(), null });
         }
     }
 
@@ -532,8 +544,8 @@ pub const Vulkan = struct {
 
         self.swapchain_images = try self.device.getSwapchainImagesAllocKHR(self.swapchain, self.allocator);
 
-        try self.deletion_queue.push(self.allocator, Device.destroySwapchainKHR, .{ self.device, self.swapchain, null });
-        try self.deletion_queue.push(self.allocator, std.mem.Allocator.free, .{ self.allocator, self.swapchain_images });
+        try self.delque.push(self.allocator, Device.destroySwapchainKHR, .{ self.device, self.swapchain, null });
+        try self.delque.push(self.allocator, std.mem.Allocator.free, .{ self.allocator, self.swapchain_images });
     }
 
     fn clearSwapchain(self: *@This()) void {
@@ -557,9 +569,224 @@ pub const Vulkan = struct {
         try self.createImageViews();
     }
 
-    pub fn init(self: *@This(), gpa: std.mem.Allocator, debug_mode: bool, window: *win.Window, app_name: [:0]const u8) !void {
+    fn createDescriptorSetLayout(self: *@This()) !void {
+        const bindings = [_]vk.DescriptorSetLayoutBinding{
+            vk.DescriptorSetLayoutBinding{ // view proj matrices struct
+                .binding = 0,
+                .descriptor_type = .uniform_buffer,
+                .descriptor_count = 1,
+                .stage_flags = .{ .vertex_bit = true },
+                .p_immutable_samplers = null,
+            },
+            vk.DescriptorSetLayoutBinding{ // model matrix struct
+                .binding = 1,
+                .descriptor_type = .uniform_buffer,
+                .descriptor_count = 1,
+                .stage_flags = .{ .vertex_bit = true },
+                .p_immutable_samplers = null,
+            },
+            vk.DescriptorSetLayoutBinding{ // texture sampler 2d
+                .binding = 2,
+                .descriptor_type = .combined_image_sampler,
+                .descriptor_count = 1,
+                .stage_flags = .{ .fragment_bit = true },
+                .p_immutable_samplers = null,
+            },
+            vk.DescriptorSetLayoutBinding{ // texture sampler 2d
+                .binding = 3,
+                .descriptor_type = .combined_image_sampler,
+                .descriptor_count = 1,
+                .stage_flags = .{ .fragment_bit = true },
+                .p_immutable_samplers = null,
+            },
+            vk.DescriptorSetLayoutBinding{ // texture sampler 2d
+                .binding = 4,
+                .descriptor_type = .uniform_buffer,
+                .descriptor_count = 1,
+                .stage_flags = .{ .fragment_bit = true },
+                .p_immutable_samplers = null,
+            },
+            vk.DescriptorSetLayoutBinding{ // texture sampler 2d
+                .binding = 5,
+                .descriptor_type = .uniform_buffer,
+                .descriptor_count = 1,
+                .stage_flags = .{ .fragment_bit = true },
+                .p_immutable_samplers = null,
+            },
+            vk.DescriptorSetLayoutBinding{ // texture sampler 2d
+                .binding = 6,
+                .descriptor_type = .uniform_buffer,
+                .descriptor_count = 1,
+                .stage_flags = .{ .fragment_bit = true },
+                .p_immutable_samplers = null,
+            },
+        };
+
+        const layout_info = vk.DescriptorSetLayoutCreateInfo{
+            .binding_count = bindings.len,
+            .p_bindings = &bindings,
+        };
+
+        self.descriptor_set_layout = try self.device.createDescriptorSetLayout(&layout_info, null);
+
+        try self.delque.push(self.allocator, Device.destroyDescriptorSetLayout, .{ self.device, self.descriptor_set_layout, null });
+    }
+
+    fn createGraphicsPipeline(self: *@This()) !void {
+        const vert = try self.shaders.get("lit.vert");
+        const frag = try self.shaders.get("lit.frag");
+
+        const stages = [_]vk.PipelineShaderStageCreateInfo{ vert.stage_info, frag.stage_info };
+
+        const vertex_input_info = vk.PipelineVertexInputStateCreateInfo{
+            .vertex_binding_description_count = 1,
+            .p_vertex_binding_descriptions = @ptrCast(&mesh.Vertex.binding_description),
+            .vertex_attribute_description_count = mesh.Vertex.attribute_descriptions.len,
+            .p_vertex_attribute_descriptions = @ptrCast(&mesh.Vertex.attribute_descriptions),
+        };
+
+        const input_assembly = vk.PipelineInputAssemblyStateCreateInfo{
+            .topology = .triangle_list,
+            .primitive_restart_enable = .false,
+        };
+
+        const viewport_state = vk.PipelineViewportStateCreateInfo{
+            .viewport_count = 1,
+            .scissor_count = 1,
+        };
+
+        const dynamic_states = [_]vk.DynamicState{ .viewport, .scissor };
+        const dynamic_state = vk.PipelineDynamicStateCreateInfo{
+            .dynamic_state_count = dynamic_states.len,
+            .p_dynamic_states = &dynamic_states,
+        };
+
+        const rasterizer = vk.PipelineRasterizationStateCreateInfo{
+            .depth_clamp_enable = .false,
+            .depth_bias_enable = .false,
+            .depth_bias_clamp = 0,
+            .depth_bias_constant_factor = 0,
+            .depth_bias_slope_factor = 0,
+            .rasterizer_discard_enable = .false,
+            .polygon_mode = .fill,
+            .cull_mode = .{ .back_bit = true },
+            .front_face = .counter_clockwise,
+            .line_width = 1.0,
+        };
+
+        const multisampling = vk.PipelineMultisampleStateCreateInfo{
+            .rasterization_samples = .{ .@"1_bit" = true },
+            .sample_shading_enable = .false,
+            .alpha_to_coverage_enable = .false,
+            .alpha_to_one_enable = .false,
+            .min_sample_shading = 0,
+        };
+
+        const color_blend_attachment = vk.PipelineColorBlendAttachmentState{
+            .blend_enable = .true,
+            .src_color_blend_factor = .src_alpha,
+            .dst_color_blend_factor = .one_minus_src_alpha,
+            .color_blend_op = .add,
+            .src_alpha_blend_factor = .one,
+            .dst_alpha_blend_factor = .zero,
+            .alpha_blend_op = .add,
+            .color_write_mask = .{
+                .r_bit = true,
+                .g_bit = true,
+                .b_bit = true,
+                .a_bit = true,
+            },
+        };
+
+        const color_blending = vk.PipelineColorBlendStateCreateInfo{
+            .logic_op_enable = .false,
+            .logic_op = .copy,
+            .blend_constants = .{ 0, 0, 0, 0 },
+            .attachment_count = 1,
+            .p_attachments = @ptrCast(&color_blend_attachment),
+        };
+
+        const depth_stencil = vk.PipelineDepthStencilStateCreateInfo{
+            .depth_test_enable = .true,
+            .depth_write_enable = .true,
+            .depth_compare_op = .less_or_equal,
+            .depth_bounds_test_enable = .false,
+            .max_depth_bounds = 0,
+            .min_depth_bounds = 0,
+            .stencil_test_enable = .false,
+            .front = .{
+                .fail_op = .keep,
+                .pass_op = .keep,
+                .depth_fail_op = .keep,
+                .compare_op = .always,
+                .compare_mask = 0,
+                .write_mask = 0,
+                .reference = 1,
+            },
+            .back = .{
+                .fail_op = .keep,
+                .pass_op = .keep,
+                .depth_fail_op = .keep,
+                .compare_op = .always,
+                .compare_mask = 0,
+                .write_mask = 0,
+                .reference = 0,
+            },
+        };
+
+        const pipeline_layout_info = vk.PipelineLayoutCreateInfo{
+            .set_layout_count = 1,
+            .p_set_layouts = @ptrCast(&self.descriptor_set_layout),
+            .push_constant_range_count = 0,
+        };
+
+        const pipeline_layout = try self.device.createPipelineLayout(&pipeline_layout_info, null);
+
+        try self.delque.push(self.allocator, Device.destroyPipelineLayout, .{ self.device, pipeline_layout, null });
+
+        const rendering_info = vk.PipelineRenderingCreateInfo{
+            .color_attachment_count = 1,
+            .p_color_attachment_formats = @ptrCast(&self.swapchain_surface_format.format),
+            .depth_attachment_format = .d32_sfloat_s8_uint,
+            .stencil_attachment_format = .d32_sfloat_s8_uint,
+            .view_mask = 0,
+        };
+
+        const gfx_pipeline_info = vk.GraphicsPipelineCreateInfo{
+            .p_next = &rendering_info,
+            .stage_count = 2,
+            .p_stages = &stages,
+            .p_vertex_input_state = &vertex_input_info,
+            .p_input_assembly_state = &input_assembly,
+            .p_viewport_state = &viewport_state,
+            .p_rasterization_state = &rasterizer,
+            .p_multisample_state = &multisampling,
+            .p_color_blend_state = &color_blending,
+            .p_depth_stencil_state = &depth_stencil,
+            .p_dynamic_state = &dynamic_state,
+            .layout = pipeline_layout,
+            .render_pass = .null_handle,
+            .subpass = 0,
+            .base_pipeline_index = 0,
+        };
+
+        _ = try self.device.createGraphicsPipelines(.null_handle, (&gfx_pipeline_info)[0..1], null, (&self.gfx_pipeline)[0..1]);
+
+        try self.delque.push(self.allocator, Device.destroyPipeline, .{ self.device, self.gfx_pipeline, null });
+    }
+
+    /// TODO: Make creation info struct
+    pub fn init(
+        self: *@This(),
+        gpa: std.mem.Allocator,
+        io: std.Io,
+        path_resolver: *const core.PathResolver,
+        debug_mode: bool,
+        window: *win.Window,
+        app_name: [:0]const u8,
+    ) !void {
         self.allocator = gpa;
-        self.deletion_queue = try .initCapacity(self.allocator, 1);
+        self.delque = try .initCapacity(self.allocator, 2);
 
         self.window = window;
 
@@ -581,22 +808,29 @@ pub const Vulkan = struct {
 
         try self.createInstance(base_wrapper, debug_mode, app_name);
         if (debug_mode) try self.createDebugMessenger();
-
         try self.createSurface();
         try self.choosePhysicalDevice();
         try self.createLogicalDevice();
         try self.initVMA(base_wrapper);
         try self.createSwapchain();
         try self.createImageViews();
+        try self.createDescriptorSetLayout();
+
+        self.shaders = try .init(self.allocator);
+        try self.delque.push(self.allocator, sh.ShaderRegistry.deinit, .{ &self.shaders, self.allocator, self.device });
+
+        try sh.loadShaders(io, gpa, &self.shaders, self.device, path_resolver.shader_bins_path);
+
+        try self.createGraphicsPipeline();
     }
 
     pub fn deinit(self: *@This()) void {
         self.swapchain_image_views.deinit(self.allocator);
 
-        self.deletion_queue.deinit(self.allocator);
+        self.delque.deinit(self.allocator);
     }
 
-    pub fn getSwapchainFormat(self: *@This(), window: *const win.Window) !TextureFormat {
-        return try TextureFormat.fromSdl(c.SDL_GetGPUSwapchainTextureFormat(self.sdl_gpu_device, window.sdl_window));
+    pub fn getSwapchainFormat(self: *@This(), window: *const win.Window) !tex.TextureFormat {
+        return try tex.TextureFormat.fromSdl(c.SDL_GetGPUSwapchainTextureFormat(self.sdl_gpu_device, window.sdl_window));
     }
 };

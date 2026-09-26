@@ -188,11 +188,6 @@ pub const Renderer = struct {
         debug: bool,
         multisamples: tex.SampleCount,
     ) !void {
-        // test vulkan
-        var vulkantest: vktest.Vulkan = undefined;
-        try vulkantest.init(gpa, debug, window, "test");
-        defer vulkantest.deinit();
-
         self.allocator = gpa;
 
         self.delque = try .initCapacity(self.allocator, 5);

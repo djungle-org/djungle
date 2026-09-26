@@ -4,14 +4,14 @@ struct ViewProj {
   float4x4 view;
   float4x4 proj;
 };
-[[vk_binding(0, 1)]]
+[[vk_binding(0, 0)]]
 ConstantBuffer<ViewProj> viewProj;
 
 struct Model {
   float4x4 model;
   float3x3 model_normals;
 };
-[[vk_binding(1, 1)]]
+[[vk_binding(1, 0)]]
 ConstantBuffer<Model> model;
 
 struct VSInput {

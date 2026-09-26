@@ -1,6 +1,8 @@
 const std = @import("std");
 const c = @import("C").c;
 const log = @import("Logging");
+const vk = @import("Vulkan");
+
 const img = @import("image.zig");
 const buf = @import("buffer.zig");
 
@@ -19,6 +21,15 @@ pub const SampleCount = enum {
             ._2 => c.SDL_GPU_SAMPLECOUNT_2,
             ._4 => c.SDL_GPU_SAMPLECOUNT_4,
             ._8 => c.SDL_GPU_SAMPLECOUNT_8,
+        };
+    }
+
+    pub fn toVk(self: @This()) vk.SampleCountFlags {
+        return switch (self) {
+            ._1 => vk.SampleCountFlags{ .@"1_bit" = true },
+            ._2 => vk.SampleCountFlags{ .@"2_bit" = true },
+            ._4 => vk.SampleCountFlags{ .@"4_bit" = true },
+            ._8 => vk.SampleCountFlags{ .@"8_bit" = true },
         };
     }
 };

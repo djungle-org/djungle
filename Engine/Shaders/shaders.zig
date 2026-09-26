@@ -1,8 +1,6 @@
 const std = @import("std");
-const c = @import("C").c;
+const vk = @import("Vulkan");
 const log = @import("Logging");
-
-const GpuDevice = @import("Renderer").dev.GpuDevice;
 
 pub const Error = error{
     FailedToCreateGpuShader,
@@ -76,7 +74,7 @@ pub const ShaderBinary = struct {
     binary_path: []const u8,
 };
 
-pub const ShaderKind = enum {
+pub const ShaderStage = enum {
     Vertex,
     Fragment,
 };
@@ -92,44 +90,45 @@ pub const DescriptorCounts = struct {
 /// contains the actual shader module used in pipeline creation
 pub const Shader = struct {
     /// read only
-    sdl_gpu_shader: *c.SDL_GPUShader,
+    module: vk.ShaderModule,
     /// read only
-    kind: ShaderKind,
+    stage_info: vk.PipelineShaderStageCreateInfo,
 
+    /// entrypoint name will be owned by Shader and freed by Shader
     pub fn init(
-        gpu_device: *GpuDevice,
+        device: vk.DeviceProxy,
         code_size: usize,
-        code: []const u8,
+        code: []const u32,
         entrypoint_name: [:0]const u8,
-        shader_kind: ShaderKind,
+        stage: ShaderStage,
         descriptor_counts: DescriptorCounts,
     ) !@This() {
-        const shader_info = c.SDL_GPUShaderCreateInfo{
+        _ = descriptor_counts;
+
+        const create_info = vk.ShaderModuleCreateInfo{
             .code_size = code_size,
-            .code = @ptrCast(code),
-            .entrypoint = @ptrCast(entrypoint_name),
-            .stage = switch (shader_kind) {
-                .Vertex => c.SDL_GPU_SHADERSTAGE_VERTEX,
-                .Fragment => c.SDL_GPU_SHADERSTAGE_FRAGMENT,
-            },
-            .format = c.SDL_GPU_SHADERFORMAT_SPIRV,
-            .num_samplers = descriptor_counts.samplers,
-            .num_storage_buffers = descriptor_counts.storage_buffers,
-            .num_storage_textures = descriptor_counts.storage_textures,
-            .num_uniform_buffers = descriptor_counts.uniform_buffers,
+            .p_code = code.ptr,
         };
 
+        const module = try device.createShaderModule(&create_info, null);
+
         return .{
-            .sdl_gpu_shader = c.SDL_CreateGPUShader(gpu_device.sdl_gpu_device, &shader_info) orelse {
-                log.err(@src(), "{s}", .{c.SDL_GetError()});
-                return Error.FailedToCreateGpuShader;
+            .module = module,
+            .stage_info = .{
+                .stage = .{
+                    .vertex_bit = if (stage == .Vertex) true else false,
+                    .fragment_bit = if (stage == .Fragment) true else false,
+                },
+                .module = module,
+                .p_name = entrypoint_name,
+                .p_specialization_info = null,
             },
-            .kind = shader_kind,
         };
     }
 
-    pub fn deinit(self: *@This(), gpu_device: *GpuDevice) void {
-        c.SDL_ReleaseGPUShader(gpu_device.sdl_gpu_device, self.sdl_gpu_shader);
+    pub fn deinit(self: *const @This(), gpa: std.mem.Allocator, device: vk.DeviceProxy) void {
+        device.destroyShaderModule(self.module, null);
+        gpa.free(self.stage_info.p_name[0 .. std.mem.len(self.stage_info.p_name) + 1]);
     }
 };
 
@@ -144,11 +143,11 @@ pub const ShaderRegistry = struct {
         };
     }
 
-    pub fn deinit(self: *@This(), gpu_device: *GpuDevice) void {
+    pub fn deinit(self: *@This(), gpa: std.mem.Allocator, device: vk.DeviceProxy) void {
         var iter = self.shader_map.iterator();
 
         while (iter.next()) |entry| {
-            entry.value_ptr.deinit(gpu_device);
+            entry.value_ptr.deinit(gpa, device);
         }
 
         self.shader_map.deinit();
@@ -162,7 +161,7 @@ pub const ShaderRegistry = struct {
         try self.shader_map.put(name, shader.*);
     }
 
-    pub fn get(self: *@This(), shader_name: []const u8) !Shader {
+    pub fn get(self: *const @This(), shader_name: []const u8) !Shader {
         return self.shader_map.get(shader_name) orelse {
             return Error.FailedToGetShaderFromRegistry;
         };
@@ -172,7 +171,7 @@ pub const ShaderRegistry = struct {
 /// will clear the shader registry
 /// reads shader_binaries.zon file in zig-out to create shaders which will be added to the registry
 /// shader_binaries.zon contains info about the spirv shader binaries
-pub fn loadShaders(io: std.Io, allocator: std.mem.Allocator, registry: *ShaderRegistry, gpu_device: *GpuDevice, spirv_bin_dir_path: [:0]const u8) !void {
+pub fn loadShaders(io: std.Io, allocator: std.mem.Allocator, registry: *ShaderRegistry, device: vk.DeviceProxy, spirv_bin_dir_path: [:0]const u8) !void {
     registry.clearRetainingCapacity();
 
     var arena_state = std.heap.ArenaAllocator.init(allocator);
@@ -197,7 +196,7 @@ pub fn loadShaders(io: std.Io, allocator: std.mem.Allocator, registry: *ShaderRe
         const entrypoint_name = entrypoint.get("name").?.string;
         const stage_name = entrypoint.get("stage").?.string;
 
-        const stage: ShaderKind = if (std.mem.eql(u8, stage_name, "vertex"))
+        const stage: ShaderStage = if (std.mem.eql(u8, stage_name, "vertex"))
             .Vertex
         else if (std.mem.eql(u8, stage_name, "fragment"))
             .Fragment
@@ -225,13 +224,22 @@ pub fn loadShaders(io: std.Io, allocator: std.mem.Allocator, registry: *ShaderRe
             }
         }
 
-        const binary_buf = try spirv_bin_dir.readFileAlloc(io, binary_file.binary_path, arena, .unlimited);
+        const binary_buf_bytes = try spirv_bin_dir.readFileAllocOptions(
+            io,
+            binary_file.binary_path,
+            arena,
+            .unlimited,
+            .of(u32),
+            null,
+        );
+
+        const binary_buf: []u32 = std.mem.bytesAsSlice(u32, binary_buf_bytes);
 
         const shader = try Shader.init(
-            gpu_device,
-            binary_buf.len * @sizeOf(u8),
+            device,
+            binary_buf.len * @sizeOf(u32),
             binary_buf,
-            try arena.dupeSentinel(u8, entrypoint_name, 0),
+            try allocator.dupeSentinel(u8, entrypoint_name, 0),
             stage,
             descriptor_counts,
         );

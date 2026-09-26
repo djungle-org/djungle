@@ -123,7 +123,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
-    shaders.addImport("C", c);
+    shaders.addImport("Vulkan", vulkan);
 
     const input = b.addModule("Input", .{
         .root_source_file = b.path("Input/input.zig"),

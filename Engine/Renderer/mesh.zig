@@ -1,6 +1,7 @@
 const std = @import("std");
 const c = @import("C").c;
 const la = @import("Lalg");
+const vk = @import("Vulkan");
 
 const rdr = @import("renderer.zig");
 const buf = @import("buffer.zig");
@@ -14,40 +15,73 @@ pub const Vertex = struct {
     normal: la.Vec3,
     col: la.Vec4 = .{ 1, 1, 1, 1 },
     uv: la.Vec2 = .{ 0, 0 },
+
+    pub const binding_description = vk.VertexInputBindingDescription{
+        .binding = 0,
+        .stride = @sizeOf(Vertex),
+        .input_rate = .vertex,
+    };
+
+    pub const attribute_descriptions = [_]vk.VertexInputAttributeDescription{
+        vk.VertexInputAttributeDescription{ // pos
+            .location = 0,
+            .binding = 0,
+            .format = .r32g32b32_sfloat,
+            .offset = @offsetOf(Vertex, "pos"),
+        },
+        vk.VertexInputAttributeDescription{ // normal
+            .location = 1,
+            .binding = 0,
+            .format = .r32g32b32_sfloat,
+            .offset = @offsetOf(Vertex, "normal"),
+        },
+        vk.VertexInputAttributeDescription{ // col
+            .location = 2,
+            .binding = 0,
+            .format = .r32g32b32a32_sfloat,
+            .offset = @offsetOf(Vertex, "col"),
+        },
+        vk.VertexInputAttributeDescription{ // uv
+            .location = 3,
+            .binding = 0,
+            .format = .r32g32_sfloat,
+            .offset = @offsetOf(Vertex, "uv"),
+        },
+    };
 };
 
-pub const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
-    .slot = 0,
-    .pitch = @sizeOf(Vertex),
-    .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
-};
-
-pub const vertex_attribs = [_]c.SDL_GPUVertexAttribute{
-    .{ // pos
-        .location = 0,
-        .buffer_slot = 0,
-        .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-        .offset = 0,
-    },
-    .{ // col
-        .location = 1,
-        .buffer_slot = 0,
-        .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
-        .offset = @offsetOf(Vertex, "col"),
-    },
-    .{ // uv
-        .location = 2,
-        .buffer_slot = 0,
-        .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-        .offset = @offsetOf(Vertex, "uv"),
-    },
-    .{ // normal
-        .location = 3,
-        .buffer_slot = 0,
-        .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-        .offset = @offsetOf(Vertex, "normal"),
-    },
-};
+// pub const vertex_buf_description = c.SDL_GPUVertexBufferDescription{
+//     .slot = 0,
+//     .pitch = @sizeOf(Vertex),
+//     .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
+// };
+//
+// pub const vertex_attribs = [_]c.SDL_GPUVertexAttribute{
+//     .{ // pos
+//         .location = 0,
+//         .buffer_slot = 0,
+//         .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+//         .offset = 0,
+//     },
+//     .{ // col
+//         .location = 1,
+//         .buffer_slot = 0,
+//         .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+//         .offset = @offsetOf(Vertex, "col"),
+//     },
+//     .{ // uv
+//         .location = 2,
+//         .buffer_slot = 0,
+//         .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+//         .offset = @offsetOf(Vertex, "uv"),
+//     },
+//     .{ // normal
+//         .location = 3,
+//         .buffer_slot = 0,
+//         .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+//         .offset = @offsetOf(Vertex, "normal"),
+//     },
+// };
 
 /// initialized with the drawCall function in a Mesh
 /// can be reused with new model matrices for multiple draw calls

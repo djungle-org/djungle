@@ -1,6 +1,6 @@
 import common;
 
-[[vk_binding(0, 2)]]
+[[vk_binding(2, 0)]]
 Sampler2D baseTexture;
 
 // [[vk_binding(1, 2)]]
@@ -9,19 +9,19 @@ Sampler2D baseTexture;
 // [[vk_binding(2, 2)]]
 // Sampler2D metallicTexture;
 
-[[vk_binding(1, 2)]]
+[[vk_binding(3, 0)]]
 Sampler2D normalTexture;
 
 struct Camera {
   float3 pos;
 };
-[[vk_binding(0, 3)]]
+[[vk_binding(4, 0)]]
 ConstantBuffer<Camera> camera;
 
 struct Light {
   float3 pos;
 };
-[[vk_binding(1, 3)]]
+[[vk_binding(5, 0)]]
 ConstantBuffer<Light> light;
 
 struct Material {
@@ -29,7 +29,7 @@ struct Material {
   float metallic;
   float roughness;
 };
-[[vk_binding(2, 3)]]
+[[vk_binding(6, 0)]]
 ConstantBuffer<Material> material;
 
 static const float PI = 3.14159265359;

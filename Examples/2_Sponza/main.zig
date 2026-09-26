@@ -34,7 +34,7 @@ pub fn main(init: std.process.Init) !void {
 
     // test vulkan
     var vulkantest: rdr.vktest.Vulkan = undefined;
-    try vulkantest.init(gpa, debug, &window, "test");
+    try vulkantest.init(gpa, io, &path_resolver, debug, &window, "test");
     defer vulkantest.deinit();
 
     // var renderer: rdr.Renderer = undefined;
