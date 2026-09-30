@@ -84,34 +84,39 @@ pub const Image = struct {
         if (result != c.VK_SUCCESS)
             return Error.FailedToCreateVmaImage;
 
-        const zig_image: vk.Image = @enumFromInt(c_image);
-
-        const view_create_info = vk.ImageViewCreateInfo{
-            .image = zig_image,
-            .view_type = .@"2d",
-            .format = format,
-            .subresource_range = .{
-                .aspect_mask = .{ .depth_bit = true },
-                .level_count = 1,
-                .base_mip_level = 0,
-                .layer_count = 1,
-                .base_array_layer = 0,
-            },
-        };
-        const image_view = try device.createImageView(&view_create_info, null);
+        const zig_image: vk.Image = @enumFromInt(@intFromPtr(c_image));
 
         return .{
             .image = zig_image,
-            .image_view = image_view,
+            .image_view = try createImageView(device, &zig_image, format, .{ .depth_bit = true }),
             .alloc = alloc,
             .alloc_info = alloc_info,
         };
     }
 
-    pub fn deinit(self: *@This(), vma_allocator: c.VmaAllocator) void {
-        c.vmaDestroyImage(vma_allocator, self.image, self.alloc);
+    pub fn deinit(self: *@This(), device: Device, vma_allocator: c.VmaAllocator) void {
+        device.destroyImageView(self.image_view, null);
+        c.vmaDestroyImage(vma_allocator, @ptrFromInt(@intFromEnum(self.image)), self.alloc);
     }
 };
+
+fn createImageView(device: Device, image: *const vk.Image, format: vk.Format, aspect_mask: vk.ImageAspectFlags) !vk.ImageView {
+    const create_info = vk.ImageViewCreateInfo{
+        .image = image.*,
+        .view_type = .@"2d",
+        .format = format,
+        .components = .{ .r = .r, .g = .g, .b = .b, .a = .a },
+        .subresource_range = .{
+            .aspect_mask = aspect_mask,
+            .level_count = 1,
+            .base_mip_level = 0,
+            .layer_count = 1,
+            .base_array_layer = 0,
+        },
+    };
+
+    return try device.createImageView(&create_info, null);
+}
 
 pub const Vulkan = struct {
     pub const Error = error{
@@ -577,31 +582,13 @@ pub const Vulkan = struct {
         return min_img_count;
     }
 
-    fn createImageView(self: *@This(), image: *const vk.Image, format: vk.Format) !vk.ImageView {
-        const create_info = vk.ImageViewCreateInfo{
-            .image = image.*,
-            .view_type = .@"2d",
-            .format = format,
-            .components = .{ .r = .r, .g = .g, .b = .b, .a = .a },
-            .subresource_range = .{
-                .aspect_mask = .{ .color_bit = true },
-                .level_count = 1,
-                .base_mip_level = 0,
-                .layer_count = 1,
-                .base_array_layer = 0,
-            },
-        };
-
-        return try self.device.createImageView(&create_info, null);
-    }
-
     fn createImageViews(self: *@This()) !void {
         std.debug.assert(self.swapchain_image_views.items.len == 0);
 
         for (self.swapchain_images) |image| {
             try self.swapchain_image_views.append(
                 self.allocator,
-                try self.createImageView(&image, self.swapchain_surface_format.format),
+                try createImageView(self.device, &image, self.swapchain_surface_format.format, .{ .color_bit = true }),
             );
 
             try self.delque.push(self.allocator, Device.destroyImageView, .{ self.device, self.swapchain_image_views.getLast(), null });
@@ -698,7 +685,7 @@ pub const Vulkan = struct {
             .{ .depth_stencil_attachment_bit = true },
         );
 
-        try self.delque.push(self.allocator, Image.deinit, .{ &self.depth_image, self.vma_allocator });
+        try self.delque.push(self.allocator, Image.deinit, .{ &self.depth_image, self.device, self.vma_allocator });
     }
 
     fn createDescriptorSetLayout(self: *@This()) !void {
@@ -957,6 +944,7 @@ pub const Vulkan = struct {
         try self.initVMA(base_wrapper);
         try self.createSwapchain();
         try self.createImageViews();
+        try self.createDepthAttachment();
         try self.createDescriptorSetLayout();
 
         self.shaders = try .init(self.allocator);
