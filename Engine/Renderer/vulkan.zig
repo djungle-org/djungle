@@ -21,6 +21,98 @@ const Instance = vk.InstanceProxy;
 const Device = vk.DeviceProxy;
 const Queue = vk.QueueProxy;
 
+pub const Image = struct {
+    pub const Error = error{
+        FailedToCreateVmaImage,
+    };
+
+    image: vk.Image,
+    image_view: vk.ImageView,
+    alloc: c.VmaAllocation,
+    alloc_info: c.VmaAllocationInfo,
+
+    pub fn init(
+        device: Device,
+        vma_allocator: c.VmaAllocator,
+        width: u32,
+        height: u32,
+        format: vk.Format,
+        tiling: vk.ImageTiling,
+        usage: vk.ImageUsageFlags,
+    ) !@This() {
+        const image_info = vk.ImageCreateInfo{
+            .image_type = .@"2d",
+            .format = format,
+            .extent = .{
+                .width = width,
+                .height = height,
+                .depth = 1,
+            },
+            .mip_levels = 1,
+            .array_layers = 1,
+            .samples = .{ .@"1_bit" = true },
+            .tiling = tiling,
+            .usage = usage,
+            .sharing_mode = .exclusive,
+            .initial_layout = .undefined,
+        };
+
+        const alloc_create_info = c.VmaAllocationCreateInfo{
+            .flags = c.VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+            .usage = c.VMA_MEMORY_USAGE_AUTO,
+            .requiredFlags = 0,
+            .preferredFlags = 0,
+            .memoryTypeBits = 0,
+            .pool = null,
+            .pUserData = null,
+            .minAlignment = 0,
+            .priority = 0,
+        };
+
+        var c_image: c.VkImage = undefined;
+        var alloc: c.VmaAllocation = undefined;
+        var alloc_info: c.VmaAllocationInfo = undefined;
+
+        const result = c.vmaCreateImage(
+            vma_allocator,
+            &@bitCast(image_info),
+            &alloc_create_info,
+            &c_image,
+            &alloc,
+            &alloc_info,
+        );
+        if (result != c.VK_SUCCESS)
+            return Error.FailedToCreateVmaImage;
+
+        const zig_image: vk.Image = @enumFromInt(c_image);
+
+        const view_create_info = vk.ImageViewCreateInfo{
+            .image = zig_image,
+            .view_type = .@"2d",
+            .format = format,
+            .subresource_range = .{
+                .aspect_mask = .{ .depth_bit = true },
+                .level_count = 1,
+                .base_mip_level = 0,
+                .layer_count = 1,
+                .base_array_layer = 0,
+            },
+        };
+        const image_view = try device.createImageView(&view_create_info, null);
+
+        return .{
+            .image = zig_image,
+            .image_view = image_view,
+            .alloc = alloc,
+            .alloc_info = alloc_info,
+        };
+    }
+
+    pub fn deinit(self: *@This(), vma_allocator: c.VmaAllocator) void {
+        c.vmaDestroyImage(vma_allocator, self.image, self.alloc);
+    }
+};
+
 pub const Vulkan = struct {
     pub const Error = error{
         InvalidPropertyType,
@@ -73,11 +165,16 @@ pub const Vulkan = struct {
     swapchain_images: []vk.Image,
     swapchain_image_views: std.ArrayList(vk.ImageView),
 
+    depth_format: vk.Format,
+    depth_image: Image,
+
     descriptor_set_layout: vk.DescriptorSetLayout,
 
     shaders: sh.ShaderRegistry,
 
     gfx_pipeline: vk.Pipeline,
+
+    command_pool: vk.CommandPool,
 
     /// PropertyType must be vk.LayerProperties or vk.ExtensionProperties
     fn allSupported(required: []const [:0]const u8, comptime PropertyType: type, properties: []const PropertyType) !bool {
@@ -294,9 +391,9 @@ pub const Vulkan = struct {
             device_extensions_props,
         );
 
-        var vulkan11features = vk.PhysicalDeviceVulkan11Features{};
+        // var vulkan11features = vk.PhysicalDeviceVulkan11Features{};
         var vulkan12features = vk.PhysicalDeviceVulkan12Features{
-            .p_next = &vulkan11features,
+            // .p_next = &vulkan10features,
         };
         var vulkan13features = vk.PhysicalDeviceVulkan13Features{
             .p_next = &vulkan12features,
@@ -312,12 +409,17 @@ pub const Vulkan = struct {
         self.instance.getPhysicalDeviceFeatures2(physical_device.*, &features);
 
         const supports_required_features =
-            vulkan11features.shader_draw_parameters == .true and
+            // vulkan11features.shader_draw_parameters == .true and
             vulkan12features.buffer_device_address == .true and
+            vulkan12features.descriptor_indexing == .true and
+            vulkan12features.shader_sampled_image_array_non_uniform_indexing == .true and
+            vulkan12features.descriptor_binding_variable_descriptor_count == .true and
+            vulkan12features.runtime_descriptor_array == .true and
             vulkan13features.synchronization_2 == .true and
             vulkan13features.dynamic_rendering == .true and
             vulkan13features.shader_demote_to_helper_invocation == .true and
-            extended_dynamic_state_features_ext.extended_dynamic_state == .true;
+            extended_dynamic_state_features_ext.extended_dynamic_state == .true and
+            features.features.sampler_anisotropy == .true;
 
         return .{
             supports_targeted_api_version and supports_graphics_and_surfaces and supports_required_extensions and supports_required_features,
@@ -343,11 +445,15 @@ pub const Vulkan = struct {
 
     fn createLogicalDevice(self: *@This()) !void {
         var vulkan11features = vk.PhysicalDeviceVulkan11Features{
-            .shader_draw_parameters = .true,
+            // .shader_draw_parameters = .true,
         };
         var vulkan12features = vk.PhysicalDeviceVulkan12Features{
             .p_next = &vulkan11features,
             .buffer_device_address = .true,
+            .descriptor_indexing = .true,
+            .shader_sampled_image_array_non_uniform_indexing = .true,
+            .descriptor_binding_variable_descriptor_count = .true,
+            .runtime_descriptor_array = .true,
         };
         var vulkan13features = vk.PhysicalDeviceVulkan13Features{
             .p_next = &vulkan12features,
@@ -444,21 +550,22 @@ pub const Vulkan = struct {
     }
 
     fn chooseSwapchainExtent(self: *@This(), capabilities: *const vk.SurfaceCapabilitiesKHR) vk.Extent2D {
-        if (capabilities.current_extent.width != std.math.maxInt(u32))
-            return capabilities.current_extent;
+        // on wayland if extent is 0xFFFFFFFF, extent should be determined by window size
+        if (capabilities.current_extent.width == 0xFFFFFFFF)
+            return .{
+                .width = std.math.clamp(
+                    self.window.width,
+                    capabilities.min_image_extent.width,
+                    capabilities.max_image_extent.width,
+                ),
+                .height = std.math.clamp(
+                    self.window.height,
+                    capabilities.min_image_extent.height,
+                    capabilities.max_image_extent.height,
+                ),
+            };
 
-        return .{
-            .width = std.math.clamp(
-                self.window.width,
-                capabilities.min_image_extent.width,
-                capabilities.max_image_extent.width,
-            ),
-            .height = std.math.clamp(
-                self.window.height,
-                capabilities.min_image_extent.height,
-                capabilities.max_image_extent.height,
-            ),
-        };
+        return capabilities.current_extent;
     }
 
     fn chooseSwapcainMinImageCount(capabilities: *const vk.SurfaceCapabilitiesKHR) u32 {
@@ -478,10 +585,10 @@ pub const Vulkan = struct {
             .components = .{ .r = .r, .g = .g, .b = .b, .a = .a },
             .subresource_range = .{
                 .aspect_mask = .{ .color_bit = true },
-                .base_mip_level = 0,
                 .level_count = 1,
-                .base_array_layer = 0,
+                .base_mip_level = 0,
                 .layer_count = 1,
+                .base_array_layer = 0,
             },
         };
 
@@ -567,6 +674,31 @@ pub const Vulkan = struct {
 
         try self.createSwapchain();
         try self.createImageViews();
+    }
+
+    fn createDepthAttachment(self: *@This()) !void {
+        // spec guarantees availability of either of these formats
+        const available_formats = [_]vk.Format{ .d32_sfloat_s8_uint, .d24_unorm_s8_uint };
+
+        for (available_formats) |format| {
+            const prop = self.instance.getPhysicalDeviceFormatProperties(self.physical_device, format);
+            if (prop.optimal_tiling_features.depth_stencil_attachment_bit) {
+                self.depth_format = format;
+                break;
+            }
+        }
+
+        self.depth_image = try Image.init(
+            self.device,
+            self.vma_allocator,
+            self.swapchain_extent.width,
+            self.swapchain_extent.height,
+            self.depth_format,
+            .optimal,
+            .{ .depth_stencil_attachment_bit = true },
+        );
+
+        try self.delque.push(self.allocator, Image.deinit, .{ &self.depth_image, self.vma_allocator });
     }
 
     fn createDescriptorSetLayout(self: *@This()) !void {
@@ -775,6 +907,17 @@ pub const Vulkan = struct {
         try self.delque.push(self.allocator, Device.destroyPipeline, .{ self.device, self.gfx_pipeline, null });
     }
 
+    fn createCommandPool(self: *@This()) !void {
+        const pool_info = vk.CommandPoolCreateInfo{
+            .flags = .{ .reset_command_buffer_bit = true },
+            .queue_family_index = self.gfx_queue_family_idx,
+        };
+
+        self.command_pool = try self.device.createCommandPool(&pool_info, null);
+
+        try self.delque.push(self.allocator, Device.destroyCommandPool, .{ self.device, self.command_pool, null });
+    }
+
     /// TODO: Make creation info struct
     pub fn init(
         self: *@This(),
@@ -822,6 +965,7 @@ pub const Vulkan = struct {
         try sh.loadShaders(io, gpa, &self.shaders, self.device, path_resolver.shader_bins_path);
 
         try self.createGraphicsPipeline();
+        try self.createCommandPool();
     }
 
     pub fn deinit(self: *@This()) void {
