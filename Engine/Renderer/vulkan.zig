@@ -21,6 +21,24 @@ const Instance = vk.InstanceProxy;
 const Device = vk.DeviceProxy;
 const Queue = vk.QueueProxy;
 
+fn createImageView(device: Device, image: *const vk.Image, format: vk.Format, aspect_mask: vk.ImageAspectFlags) !vk.ImageView {
+    const create_info = vk.ImageViewCreateInfo{
+        .image = image.*,
+        .view_type = .@"2d",
+        .format = format,
+        .components = .{ .r = .r, .g = .g, .b = .b, .a = .a },
+        .subresource_range = .{
+            .aspect_mask = aspect_mask,
+            .level_count = 1,
+            .base_mip_level = 0,
+            .layer_count = 1,
+            .base_array_layer = 0,
+        },
+    };
+
+    return try device.createImageView(&create_info, null);
+}
+
 pub const Image = struct {
     pub const Error = error{
         FailedToCreateVmaImage,
@@ -40,7 +58,7 @@ pub const Image = struct {
         tiling: vk.ImageTiling,
         usage: vk.ImageUsageFlags,
     ) !@This() {
-        const image_info = vk.ImageCreateInfo{
+        const image_create_info = vk.ImageCreateInfo{
             .image_type = .@"2d",
             .format = format,
             .extent = .{
@@ -75,7 +93,7 @@ pub const Image = struct {
 
         const result = c.vmaCreateImage(
             vma_allocator,
-            &@bitCast(image_info),
+            &@bitCast(image_create_info),
             &alloc_create_info,
             &c_image,
             &alloc,
@@ -100,23 +118,69 @@ pub const Image = struct {
     }
 };
 
-fn createImageView(device: Device, image: *const vk.Image, format: vk.Format, aspect_mask: vk.ImageAspectFlags) !vk.ImageView {
-    const create_info = vk.ImageViewCreateInfo{
-        .image = image.*,
-        .view_type = .@"2d",
-        .format = format,
-        .components = .{ .r = .r, .g = .g, .b = .b, .a = .a },
-        .subresource_range = .{
-            .aspect_mask = aspect_mask,
-            .level_count = 1,
-            .base_mip_level = 0,
-            .layer_count = 1,
-            .base_array_layer = 0,
-        },
+pub const Buffer = struct {
+    pub const Error = error{
+        FailedToCreateVmaBuffer,
+        FailedToFindMappedBufferData,
     };
 
-    return try device.createImageView(&create_info, null);
-}
+    buffer: vk.Buffer,
+    alloc: c.VmaAllocation,
+    alloc_info: c.VmaAllocationInfo,
+
+    /// buffer is the data to be uploaded to the vk buffer
+    pub fn init(
+        vma_allocator: c.VmaAllocator,
+        size: vk.DeviceSize,
+        usage: vk.BufferUsageFlags,
+    ) !@This() {
+        const buffer_create_info = vk.BufferCreateInfo{
+            .size = size,
+            .usage = usage,
+            .sharing_mode = .exclusive,
+        };
+
+        const alloc_create_info = c.VmaAllocationCreateInfo{
+            .flags = c.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                c.VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
+                c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            .usage = c.VMA_MEMORY_USAGE_AUTO,
+        };
+
+        var c_buffer: c.VkBuffer = undefined;
+        var alloc: c.VmaAllocation = undefined;
+        var alloc_info: c.VmaAllocationInfo = undefined;
+
+        const result = c.vmaCreateBuffer(
+            vma_allocator,
+            &@bitCast(buffer_create_info),
+            &alloc_create_info,
+            &c_buffer,
+            &alloc,
+            &alloc_info,
+        );
+        if (result != c.VK_SUCCESS)
+            return Error.FailedToCreateVmaImage;
+
+        const zig_buffer: vk.Buffer = @enumFromInt(@intFromPtr(c_buffer));
+
+        return .{
+            .buffer = zig_buffer,
+            .alloc = alloc,
+            .alloc_info = alloc_info,
+        };
+    }
+
+    pub fn deinit(self: *@This(), vma_allocator: c.VmaAllocator) void {
+        c.vmaDestroyBuffer(vma_allocator, @ptrFromInt(@intFromEnum(self.buffer)), self.alloc);
+    }
+
+    pub fn upload(self: *@This(), comptime T: type, buffer: []const T) !void {
+        const gpu_mem = self.alloc_info.pMappedData orelse return Error.FailedToFindMappedBufferData;
+        const dest: [*]T = @ptrCast(@alignCast(gpu_mem));
+        @memcpy(dest[0..buffer.len], buffer);
+    }
+};
 
 pub const Vulkan = struct {
     pub const Error = error{
